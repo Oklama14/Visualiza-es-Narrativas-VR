@@ -1,0 +1,54 @@
+\begin{thebibliography}{}
+
+\bibitem[Ens et~al. 2021]{ens2021grand}
+Ens, B., Bach, B., Cordeil, M., Engelke, U., Irani, P., Marriott, K., Oviatt,
+  S., Riche, N.~H., Schmalstieg, D., and White, D. (2021).
+\newblock Grand challenges in immersive analytics.
+\newblock In {\em Proceedings of the 2021 CHI Conference on Human Factors in
+  Computing Systems}, pages 1--17.
+
+\bibitem[Hart and Staveland 1988]{hart1988nasatlx}
+Hart, S.~G. and Staveland, L.~E. (1988).
+\newblock Development of {NASA}-{TLX} (task load index): Results of empirical
+  and theoretical research.
+\newblock In {\em Advances in Psychology}, volume~52, pages 139--183.
+  North-Holland.
+
+\bibitem[Hevner et~al. 2004]{hevner2004design}
+Hevner, A.~R., March, S.~T., Park, J., and Ram, S. (2004).
+\newblock Design science in information systems research.
+\newblock {\em MIS Quarterly}, 28(1):75--105.
+
+\bibitem[Lee et~al. 2021]{lee2021visceralization}
+Lee, B., Brown, D., Lee, B., Hurter, C., Drucker, S., and Dwyer, T. (2021).
+\newblock Data visceralization: Enabling deeper understanding of data using
+  virtual reality.
+\newblock {\em IEEE Transactions on Visualization and Computer Graphics},
+  27(2):1095--1105.
+
+\bibitem[Lee et~al. 2022]{lee2022design}
+Lee, B., Cordeil, M., Prouzeau, A., Jenny, B., and Dwyer, T. (2022).
+\newblock A design space for data visualisation transformations between 2{D}
+  and 3{D} in mixed-reality environments.
+\newblock In {\em Proceedings of the 2022 CHI Conference on Human Factors in
+  Computing Systems}, pages 1--14.
+
+\bibitem[Marriott et~al. 2018]{marriott2018immersive}
+Marriott, K., Schreiber, F., Dwyer, T., Klein, K., Riche, N.~H., Itoh, T.,
+  Stuerzlinger, W., and Thomas, B.~H. (2018).
+\newblock {\em Immersive analytics}.
+\newblock Springer.
+
+\bibitem[MEC 2024]{mec2024pnp}
+MEC (2024).
+\newblock Plataforma nilo pe{\c{c}}anha.
+\newblock \url{http://plataformanilopecanha.mec.gov.br/}.
+\newblock Acesso em: 19 jun. 2026.
+
+\bibitem[Segel and Heer 2010]{segel2010narrative}
+Segel, E. and Heer, J. (2010).
+\newblock Narrative visualization: Telling stories with data.
+\newblock {\em IEEE transactions on visualization and computer graphics},
+  16(6):1139--1148.
+
+\end{thebibliography}

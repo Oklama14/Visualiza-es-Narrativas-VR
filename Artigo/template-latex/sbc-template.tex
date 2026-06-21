@@ -1,0 +1,97 @@
+\documentclass[12pt]{article}
+
+\usepackage{sbc-template}
+\usepackage{graphicx,url}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{xcolor}
+
+\sloppy
+
+\title{\textcolor{red}{Strollytelling} e Analytics Imersivo na WebXR: Uma Abordagem Narrativa para os Dados de Eficiência Acadêmica da Rede Federal}
+
+\author{\textcolor{red}{Nome do(a) Estudante}\inst{1}, \textcolor{red}{Nome do(a) Orientador(a)}\inst{1}, \textcolor{red}{Nome do(a) Co-orientador(a) (se houver)}\inst{2}}
+
+\address{\textcolor{red}{Nome do Programa de Pós-Graduação -- Nome da Instituição}\\
+  \textcolor{red}{Endereço da Instituição}
+\nextinstitute
+  \textcolor{red}{Nome da Instituição do Co-orientador (se aplicável)}\\
+  \textcolor{red}{Endereço}
+  \email{\textcolor{red}{\{aluno, orientador\}@instituicao.edu.br}, \textcolor{red}{coorientador@outra.edu.br}}
+}
+
+\begin{document} 
+
+\maketitle
+
+\begin{resumo} 
+  \textcolor{red}{Este resumo estendido descreve uma pesquisa em andamento no contexto de [Mestrado/Doutorado]. O trabalho iniciou há X meses e tem conclusão prevista para Y.} A complexidade dos dados de eficiência educacional da Plataforma Nilo Peçanha (PNP) frequentemente aliena o público não especialista. Baseando-se no conceito de Visualização Narrativa, este projeto investiga como ambientes imersivos (VR/WebXR) podem enriquecer a narrativa de dados. Propomos um Laboratório VR que transforma taxas estatísticas em ambientes tridimensionais, empregando técnicas de \textit{strollytelling}. Como resultado parcial, apresentamos um protótipo funcional plenamente operante; hipotetiza-se que o uso espacial da narrativa reduza a carga cognitiva e amplie o engajamento na exploração de dados públicos por meio de abstrações tangíveis --- hipótese a ser avaliada empiricamente.
+\end{resumo}
+
+\section{Motivação e Objetivos}
+A compreensão de dados complexos é um desafio fundamental em Interação Humano-Computador (IHC). No contexto da educação pública brasileira, a Plataforma Nilo Peçanha (PNP) concentra métricas cruciais de evasão, retenção e eficiência da Rede Federal \cite{mec2024pnp}. No entanto, representá-los através de painéis bidimensionais (dashboards) muitas vezes não comunica adequadamente a escala, o volume e o impacto humano subjacente a esses números, falhando em engajar o cidadão leigo.
+
+A visualização narrativa (\textit{Narrative Visualization}) tem se mostrado uma ferramenta poderosa para guiar usuários através de conjuntos de dados complexos, combinando a exploração estruturada pelo autor com a agência do leitor para "contar histórias com dados" \cite{segel2010narrative}. Tradicionalmente, técnicas de navegação narrativa atreladas ao conteúdo confinam essa experiência a telas 2D. 
+
+O problema que esta pesquisa aborda é: \textbf{Como ambientes imersivos podem amplificar o engajamento e a compreensão na visualização narrativa de dados abertos?} Ambientes imersivos são extremamente valiosos para visualizações narrativas pois permitem que a informação cerque o usuário, transformando gráficos convencionais em experiências físicas, palpáveis e espacialmente distribuídas. O objetivo central do trabalho é projetar, implementar e avaliar um Laboratório VR de Dados web-based (WebXR) que traduza as estruturas clássicas de \textit{data storytelling} para o espaço tridimensional.
+
+\textcolor{red}{Informação do Programa: Esta pesquisa é desenvolvida no nível de [Mestrado/Doutorado] no Programa [Nome do Programa], com [X] meses de desenvolvimento até o momento e tempo previsto para conclusão em [Mês/Ano].}
+
+\section{Base Teórica e Trabalhos Relacionados}
+
+O referencial teórico deste trabalho repousa na intersecção entre Visualização de Dados e Realidade Virtual, um campo emergente conhecido como \textit{Immersive Analytics} \cite{marriott2018immersive, ens2021grand}. A analítica imersiva busca eliminar as barreiras entre as pessoas, seus dados e as ferramentas, valendo-se da presença espacial para explorar volumes de informação de maneira intuitiva.
+
+A principal fundamentação metodológica repousa sobre a mecânica de Visualização Narrativa, conceituada no trabalho seminal de \cite{segel2010narrative}, que delineia como padrões de design orientados pelo autor conduzem o usuário à interpretação correta. Em nossa pesquisa, aplicamos o modelo "Martini Glass", onde a narrativa se inicia de forma fortemente guiada pelo sistema (um "Tour Guiado" audível e posicional) e em seguida o "cálice" se abre para a exploração livre conduzida pelo usuário.
+
+Lee et al. \cite{lee2022design} discutem o espaço de design para visualizações em ambientes de realidade mista, demonstrando as vantagens de desvencilhar-se da tela plana. Particularmente, Lee et al. \cite{lee2021visceralization} mostram que a Realidade Virtual permite a \textit{visceralização} de dados --- restituindo a percepção de unidades e medidas frequentemente abstraídas em gráficos convencionais ---, fundamento direto da representação por Voxels adotada neste trabalho. Para transpor o \textit{scrollytelling} bidimensional para o VR de forma fiel à visão de \cite{segel2010narrative}, este projeto implementa interações de \textit{strollytelling}, em que o percurso da história está acoplado ao deslocamento espacial no ecossistema tridimensional, convertendo a tradicional barra de rolagem em mecânicas físicas tangíveis.
+
+\section{Metodologia}
+
+O trabalho adota o paradigma metodológico de \textit{Design Science Research} (DSR) \cite{hevner2004design}, alicerçando-se na construção rigorosa e iterativa de um artefato e em sua avaliação no ciclo empírico.
+
+O artefato é uma aplicação WebXR, desenvolvida em HTML e JavaScript com o auxílio do *framework* A-Frame. O design arquitetônico prioriza a inclusão e o hibridismo das interações: enquanto navegadores Desktop utilizam interações baseadas em \textit{mouse e drag}, os acessos através de Headsets VR ativam controles \textit{gaze/fuse} contínuos.
+
+Atualmente, o software consome nativamente arquivos JSON agregados a partir dos microdados da PNP. O artefato é dividido em 4 subsistemas visuais: (i) Seleção macro (mapa nacional dinâmico); (ii) Indicadores panorâmicos (medidores radiais 3D de desempenho); (iii) Linha do tempo narrada; e (iv) Composição micro-estatística, usando "Voxels" empilhados.
+
+A avaliação se dará por ensaios práticos em laboratório. Serão aplicados instrumentos validados para medir a percepção de imersão e o nível de carga cognitiva (e.g., \textit{NASA Task Load Index} \cite{hart1988nasatlx}) ao interagir espacialmente com os dados, contrapondo os métodos analíticos web tradicionais aos imersivos em WebXR. Entrevistas semiestruturadas com alunos e gestores permitirão capturar dados qualitativos aprofundados.
+
+\section{Procedimentos Éticos}
+
+Dado que a fase de avaliação do artefato envolverá testes com seres humanos — incluindo a coleta de tempo de tarefa, reações espontâneas em VR e preenchimento de inventários psicométricos de carga de trabalho — \textcolor{red}{o projeto já se encontra / será submetido à avaliação do Comitê de Ética em Pesquisa (CEP) da [Nome da Instituição] via Plataforma Brasil, CAAE [XXX.XXX.XXX]}. 
+
+É importante frisar que a coleta de dados experimentais se iniciará somente após a devida aprovação pelo conselho ético. Todos os participantes voluntários consentirão os termos de pesquisa assinando o Termo de Consentimento Livre e Esclarecido (TCLE), garantindo o anonimato absoluto e sigilo dos participantes, amparado pela Lei Geral de Proteção de Dados (LGPD).
+
+\section{Resultados Esperados e Contribuições}
+
+Na atual etapa, a plataforma já apresenta um motor visual plenamente operante que dispensa dependências externas pesadas e que lida de forma autônoma com as instâncias narrativas do \textit{strollytelling}. Uma inovação estrutural obtida foi a representação geométrica por Voxels: onde gráficos cilíndricos tradicionais são substituídos por blocos empilhados espacialmente (onde cada bloco unitário equivale precisamente a 1\% do contingente real de evasão ou retenção), traduzindo abstrações abstratas e percentuais em matéria virtual tátil.
+
+Como contribuição essencial para a área de IHC, a pesquisa propõe evidenciar as dinâmicas de ganho de empatia cognitiva por meio da \textit{visceralização} de dados \cite{lee2021visceralization}. A hipótese central é que, ao materializar os números --- em vez de apenas ler que $60.000$ alunos evadiram ---, o usuário perceba sensorialmente o volume da perda estudantil diante de si, articulando os fundamentos da visualização narrativa \cite{segel2010narrative} com a Analítica Imersiva e democratizando a comunicação dos dados do MEC. Essa hipótese será verificada na fase de avaliação com usuários.
+
+\section{Cronograma de Atividades}
+
+A Tabela \ref{tab:cronograma} consolida as etapas macro da pesquisa de \textcolor{red}{[Mestrado/Doutorado]}.
+
+\begin{table}[ht]
+\centering
+\caption{Cronograma de desenvolvimento do projeto.}
+\label{tab:cronograma}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Atividade} & \textbf{Status / Previsão} \\ \hline
+\textcolor{red}{Levantamento Bibliográfico Sistemático} & \textcolor{red}{Concluído} \\ \hline
+\textcolor{red}{Defesa de Qualificação} & \textcolor{red}{Concluído (Semestre X)} \\ \hline
+\textcolor{red}{Prototipação WebXR e Voxels} & \textcolor{red}{Concluído} \\ \hline
+\textcolor{red}{Submissão e Parecer do CEP} & \textcolor{red}{Em Andamento} \\ \hline
+\textcolor{red}{Ensaios Clínicos (Testes com Usuários)} & \textcolor{red}{Nov/2026 a Dez/2026} \\ \hline
+\textcolor{red}{Tabulação, Análise IHC e Escrita Final} & \textcolor{red}{Jan/2027 a Mar/2027} \\ \hline
+\textcolor{red}{Defesa Final} & \textcolor{red}{Abril/2027} \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Artefatos Adicionais (Opcional)}
+O artefato prototípico e as bibliotecas estáticas desenvolvidas neste estágio da pesquisa encontram-se temporariamente disponibilizados em repositório online anonimizado e podem ser avaliados em \textcolor{red}{\url{https://github.com/seurepositorio/vr-gpt}}.
+
+\bibliographystyle{sbc}
+\bibliography{sbc-template}
+
+\end{document}

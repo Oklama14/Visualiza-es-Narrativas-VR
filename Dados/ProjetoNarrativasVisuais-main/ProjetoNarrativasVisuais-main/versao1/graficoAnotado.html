@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gráfico Anotado - Dashboard IFFar</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+    xintegrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/magazine.css">
+</head>
+
+<body>
+  <header class="cabecalho">
+    <nav class="itens-cabecalho">
+      <a href="index.html">Poster particionado</a>
+      <a href="magazine.html">Magazine Style</a>
+      <a href="graficoAnotado.html">Gráfico Anotado</a>
+    </nav>
+  </header>
+
+  <button class="botao-menu">
+    <i class="fa-solid fa-chevron-right"></i>
+  </button>
+
+  <nav class="menu-lateral">
+    <h2>Configurar Poster</h2>
+    <p>Aqui você pode configurar os dados que serão utilizados nas comparações.
+      Primeiramente, selecione o nível desejado (Brasil, Região, Estado ou Campus). Em seguida, caso necessário,
+      especifique o valor correspondente utilizando o campo de busca.</p>
+    <div class="botoes-menu-lateral">
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" placeholder="Escolha um nível..." disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24"><path d="M6 6 L18 18 M6 18 L18 6" /></svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24"><path d="M6 6 L18 18 M6 18 L18 6" /></svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24"><path d="M6 6 L18 18 M6 18 L18 6" /></svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+      <button class="gerar-poster" onclick="gerarPoster()">Atualizar Narrativa</button>
+    </div>
+  </nav>
+
+  <div class="background"></div>
+
+  <main class="conteudo anotado pagina-grafico-anotado" id="main-content">
+    <section class="anotado-shell">
+      <div class="anotado-titulo">
+        <div>
+          <span class="tag-editorial">Narrativa visual de dados</span>
+          <h1>Eficiência Acadêmica</h1>
+          <p id="subtituloSerie">Acompanhe uma série por vez e leia os pontos críticos do período.</p>
+        </div>
+
+        <label class="seletor-serie-box" for="seletorSerie">
+          <span>Série exibida</span>
+          <select id="seletorSerie" class="form-select"></select>
+        </label>
+      </div>
+
+      <div class="contexto-selecao contexto-grafico" id="contexto-selecao"></div>
+
+      <section class="grafico-central-card">
+        <div class="grafico-central-topo">
+          <div>
+            <span class="secao-label">Série histórica</span>
+            <h2 id="tituloGraficoAnotado">Eficiência acadêmica ao longo dos anos</h2>
+          </div>
+          <div class="indicador-extremo">
+            <span>Período crítico</span>
+            <strong id="resumoValeTopo">--</strong>
+          </div>
+        </div>
+
+        <div class="grafico-central-area">
+          <canvas id="graficoAnotado"></canvas>
+        </div>
+      </section>
+
+      <section class="leitura-anotada-grid">
+        <article class="texto-explicativo-card">
+          <span class="secao-label">Indicador</span>
+          <h2>O que é Eficiência Acadêmica?</h2>
+          <p>
+            A Eficiência Acadêmica ajuda a analisar a relação entre ingresso, permanência e conclusão dos estudantes,
+            permitindo identificar quedas, evasão e melhorias no desempenho institucional ao longo do tempo.
+          </p>
+        </article>
+
+        <article class="periodo-critico-card" id="cardPeriodoCritico">
+          <span class="secao-label">Leitura do período crítico</span>
+          <h2 id="tituloPeriodoCritico">Carregando dados...</h2>
+          <p id="textoPeriodoCritico">A leitura será atualizada conforme a série selecionada.</p>
+        </article>
+      </section>
+    </section>
+  </main>
+
+  <script src="./js/script.js"></script>
+  <script src="./js/graficoAnotado.js" defer></script>
+  <script src="./js/menuLateral.js"></script>
+</body>
+
+</html>

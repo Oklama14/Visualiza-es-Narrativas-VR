@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dev - Dashboard IFFar</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+    xintegrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/magazine.css">
+</head>
+
+<body>
+  <header class="cabecalho">
+    <nav class="itens-cabecalho">
+      <a href="index.html">Poster particionado</a>
+      <a href="magazine.html">Magazine Style</a>
+      <a href="graficoAnotado.html">Gráfico Anotado</a>
+    </nav>
+  </header>
+
+  <button class="botao-menu">
+    <i class="fa-solid fa-chevron-right"></i>
+  </button>
+
+  <nav class="menu-lateral">
+    <h2>Configurar Poster</h2>
+    <p>Aqui você pode configurar os dados que serão utilizados nas comparações.
+      Primeiramente, selecione o nível desejado (Brasil, Região, Estado ou Campus). Em seguida, caso necessário,
+      especifique o valor correspondente utilizando o campo de busca.</p>
+    <div class="botoes-menu-lateral">
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path
+                d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" placeholder="Escolha um nível..." disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24">
+              <path d="M6 6 L18 18 M6 18 L18 6" />
+            </svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path
+                d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24">
+              <path d="M6 6 L18 18 M6 18 L18 6" />
+            </svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path
+                d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24">
+              <path d="M6 6 L18 18 M6 18 L18 6" />
+            </svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+      <button class="gerar-poster" onclick="gerarPoster()">Atualizar Narrativa</button>
+    </div>
+  </nav>
+
+  <div class="background"></div>
+
+<main class="conteudo magazine" id="main-content">
+    <div class="container-fluid px-lg-5 py-5">
+
+      <section class="hero-magazine mb-5">
+        <div class="row align-items-center">
+          <div class="col-lg-8">
+            <span class="tag-editorial">Plataforma Nilo Peçanha • Visualização Narrativa</span>
+            
+            <h1 class="titulo-magazine">
+              Indicadores Acadêmicos e Permanência Estudantil
+            </h1>
+            
+            <p class="subtitulo-magazine">
+              Uma análise visual baseada nos dados da Rede Federal de Educação
+              Profissional, Científica e Tecnológica, avaliando o comportamento de
+              retenção, conclusão e evasão ao longo do tempo.
+            </p>
+
+            <div id="contexto-selecao" class="contexto-selecao">
+              <div class="item-contexto">
+                <span class="tipo-contexto">Nível</span>
+                <span class="valor-contexto">Brasil</span>
+              </div>
+              <div class="item-contexto">
+                <span class="tipo-contexto">Instituição</span>
+                <span class="valor-contexto">IFFar</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-4 text-lg-end mt-4 mt-lg-0">
+            <div class="bloco-info shadow-lg">
+              <div class="mini-label">Série Histórica Analisada</div>
+              <div class="mini-valor">2017 — 2024</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="row mb-5">
+        <div class="col-lg-7 pe-lg-5">
+          <p class="texto-editorial">
+            A Plataforma Nilo Peçanha (PNP) constitui o ambiente virtual oficial de coleta,
+            validação e disseminação estatística da Rede Federal. Os dados aqui apresentados 
+            têm o objetivo transparência sobre a eficácia das políticas de permanência.
+          </p>
+          <p class="texto-editorial">
+            Nesta edição visual, cruzamos as taxas de evasão e eficiência acadêmica 
+            para identificar se as estratégias de retenção aplicadas nos últimos anos 
+            geraram impactos mensuráveis na jornada dos estudantes.
+          </p>
+        </div>
+        <div class="col-lg-5">
+          <div class="caixa-contexto">
+            <div class="contexto-titulo">Como ler este relatório</div>
+            <p class="texto-editorial" style="font-size: 1rem; margin-bottom: 0;">
+              Interaja com os controles localizados no topo de cada moldura de dados. 
+              Ao alterar métricas ou anos, as narrativas textuais associadas aos gráficos 
+              são atualizadas automaticamente para refletir o novo cenário.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="row mb-5">
+        <div class="col-12">
+          <div class="box-magazine">
+            
+            <!-- HEADER DA MOLDURA -->
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 border-bottom pb-4">
+              <div>
+                <span class="secao-label">Análise Temporal</span>
+                <h2 class="titulo-secao" id="titulo-grafico-linha">Taxa de Evasão (%)</h2>
+              </div>
+              <div>
+                <select id="metric-select" class="form-select shadow-sm" style="min-width: 220px;">
+                  <option value="evasao">Taxa de Evasão</option>
+                  <option value="conclusao">Taxa de Conclusão</option>
+                  <option value="eficiencia">Eficiência Acadêmica</option>
+                  <option value="retencao">Taxa de Retenção</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-8">
+                <h4 id="quadrado1" class="titulo-interpretativo">A Evasão em Foco</h4>
+                <p id="quadrado2" class="texto-interpretativo">
+                  Este gráfico acompanha o percentual de estudantes que interromperam o vínculo institucional antes da conclusão do curso, permitindo identificar picos históricos e tendências de queda.
+                </p>
+              </div>
+              <div class="col-lg-4">
+                <div class="observacao-editorial">
+                  <div class="obs-titulo">Nota Metodológica</div>
+                  <p class="m-0">Picos de evasão frequentemente se correlacionam a cenários macroeconômicos adversos. Avalie as oscilações considerando o contexto de cada ano.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="grafico-principal-area">
+              <canvas id="myChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BLOCO INTERPRETATIVO (QUOTE) -->
+      <section class="row mb-5 align-items-center py-4">
+        <div class="col-lg-5">
+          <div id="narrativa-destaque" class="texto-destaque">
+            Carregando narrativa...
+          </div>
+        </div>
+        <div class="col-lg-7 ps-lg-5">
+          <p id="narrativa-complementar" class="texto-editorial">
+            Carregando análise...
+          </p>
+        </div>
+      </section>
+
+      <section class="row mb-5">
+        <div class="col-12">
+          <div class="box-magazine">
+            
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 border-bottom pb-4 mb-4">
+              <div>
+                <span class="secao-label">Visão Quantitativa</span>
+                <h2 class="titulo-secao">Situação dos Estudantes</h2>
+              </div>
+              
+              <!-- SLIDER DESENHADO PARA O ESTILO -->
+              <div class="slider-container">
+                <span class="slider-label">2017</span>
+                <input type="range" min="2017" max="2024" step="1" id="yearRange" value="2024">
+                <span class="slider-label">2024</span>
+              </div>
+            </div>
+
+            <div class="row align-items-center mb-4">
+              <div class="col-lg-3">
+                <div class="ano-display">
+                  <span id="selectedYearDisplay">2024</span>
+                </div>
+              </div>
+              <div class="col-lg-9">
+                <p class="texto-interpretativo m-0">
+                  Observe a proporção de alunos por status acadêmico no ano selecionado. Este gráfico da barras busca quantificar a visualização entre as variáveis selecianadas.
+                </p>
+              </div>
+            </div>
+
+            <div class="grafico-barras-area">
+              <canvas id="grafico-barras"></canvas>
+            </div>
+
+            <div class="legenda">
+              <div class="legenda-item"><span class="cor cor-retidos"></span> Retidos</div>
+              <div class="legenda-item"><span class="cor cor-concluidos"></span> Concluídos</div>
+              <div class="legenda-item"><span class="cor cor-evadidos"></span> Evadidos</div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- DOWNLOAD E FONTES -->
+      <section class="download-section">
+        <div class="download-box shadow">
+          <div>
+            <div class="download-titulo">Transparência de Dados</div>
+            <div class="download-texto">
+              A base de microdados utilizada para gerar estas visualizações está disponível para conferência e novas pesquisas. Extração oficial PNP.
+            </div>
+          </div>
+          <div>
+            <a href="assets/EficienciaAcademica.csv" download="EficienciaAcademica.csv" class="btn btn-dark btn-lg shadow-sm">
+              <i class="fa-solid fa-download me-2"></i> Baixar Base (CSV)
+            </a>
+          </div>
+        </div>
+      </section>
+      <section class="mt-4">
+        <div class="alert alert-warning shadow-sm" role="alert">
+          <strong>Observação:</strong> Os dados relacionados ao IFRS podem apresentar
+          inconsistências ou divergências em relação às demais bases de dados analisadas.
+          Recomenda-se cautela na interpretação dos resultados associados a essa instituição.
+        </div>
+      </section>
+      <footer class="rodape-editorial mt-5">
+        <div class="row">
+          <div class="col-md-8">
+            <p class="fonte-texto">
+              <strong>Fonte:</strong> Plataforma Nilo Peçanha (PNP) • Secretaria de Educação Profissional e Tecnológica (SETEC/MEC)
+            </p>
+          </div>
+          <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <p class="fonte-texto">Gênero Narrativo • Magazine Style</p>
+          </div>
+        </div>
+      </footer>
+
+    </div>
+  </main>
+  <script src="./js/script.js"></script>
+  <script src="./js/graficoLinhas.js"></script>
+  <script src="./js/graficoBarras.js"></script>
+  <script src="./js/menuLateral.js"></script>
+</body>
+
+</html>

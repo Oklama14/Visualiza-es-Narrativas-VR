@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dev - Dashboard IFFar</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+    xintegrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/magazine.css">
+
+</head>
+
+<body>
+  <header class="cabecalho">
+    <nav class="itens-cabecalho">
+      <a href="index.html">Poster particionado</a>
+      <a href="magazine.html">Magazine Style</a>
+      <a href="graficoAnotado.html">Gráfico Anotado</a>
+    </nav>
+  </header>
+
+  <button class="botao-menu">
+    <i class="fa-solid fa-chevron-right"></i>
+  </button>
+
+  <nav class="menu-lateral">
+    <h2>Configurar Poster</h2>
+    <p>Aqui você pode configurar os dados que serão utilizados nas comparações.
+      Primeiramente, selecione o nível desejado (Brasil, Região, Estado ou Campus). Em seguida, caso necessário,
+      especifique o valor correspondente utilizando o campo de busca.</p>
+    <div class="botoes-menu-lateral">
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path
+                d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" placeholder="Escolha um nível..." disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24">
+              <path d="M6 6 L18 18 M6 18 L18 6" />
+            </svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path
+                d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24">
+              <path d="M6 6 L18 18 M6 18 L18 6" />
+            </svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+
+      <div class="box-menu-lateral">
+        <div class="filtro">
+          <select class="nivel">
+            <option value="">Nível</option>
+            <option value="brasil">Brasil</option>
+            <option value="regiao">Região</option>
+            <option value="estado">Estado</option>
+            <option value="instituicao">Instituição</option>
+            <option value="campus">Campus</option>
+          </select>
+          <div class="input-wrapper">
+            <svg class="icon-search" viewBox="0 0 24 24">
+              <path
+                d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.41-1.41-4.7-4.71A8 8 0 0010 2zM10 4a6 6 0 110 12 6 6 0 010-12z" />
+            </svg>
+            <input type="text" class="search" disabled>
+            <svg class="clear-btn" viewBox="0 0 24 24">
+              <path d="M6 6 L18 18 M6 18 L18 6" />
+            </svg>
+          </div>
+          <div class="sugestoes"></div>
+        </div>
+      </div>
+      <button class="gerar-poster" onclick="gerarPoster()">Atualizar Narrativa</button>
+    </div>
+  </nav>
+
+  <div class="background"></div>
+  <!-- CONTEUDO PRINCIPAL DA PAGINA -->
+<main class="conteudo poster-page">
+  <div class="container-fluid p-3 p-md-4">
+
+    <div class="row g-4 mb-4 align-items-stretch">
+      <div class="col-12 col-lg-10 d-flex">
+        <div class="box w-100 painel-principal">
+          <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
+            <div>
+              <div class="p1">AN&Aacute;LISE TEMPORAL (2017 a 2024)</div>
+              <div class="p2" id="titulo-grafico-linha">TAXA DE EVAS&Atilde;O %</div>
+            </div>
+            <div class="w-100 w-sm-auto">
+              <select id="metric-select" class="form-select border-2 shadow-sm" style="font-weight: 600; cursor: pointer;">
+                <option value="evasao">Evas&atilde;o</option>
+                <option value="conclusao">Conclus&atilde;o</option>
+                <option value="eficiencia">Efici&ecirc;ncia Acad&ecirc;mica</option>
+                <option value="retencao">Retidos</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex-grow-1 w-100" style="position: relative; height: 300px; max-height: 400px;">
+            <canvas id="myChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-2 d-flex flex-column gap-3">
+        <div class="box box-small w-100 flex-grow-1 text-muted">
+          <div id="quadrado1" style="color: black;">
+            <b>T&iacute;tulo da explica&ccedil;&atilde;o aqui</b>
+          </div>
+          <br>
+          <div id="quadrado2">
+            Explica&ccedil;&atilde;o aqui
+          </div>
+        </div>
+
+        <div class="box box-small w-100 flex-grow-1 text-center text-muted d-flex align-items-center justify-content-center">
+          Fonte: Plataforma Nilo Pe&ccedil;anha (PNP) &bull; Secretaria de Educa&ccedil;&atilde;o Profissional e Tecnol&oacute;gica (SETEC/MEC)
+        </div>
+
+        <div class="box box-small w-100 flex-grow-1 download-base-box">
+          <a href="assets/EficienciaAcademica.csv" download="EficienciaAcademica.csv" class="download-base-btn">
+            <i class="fa-solid fa-download"></i>
+            <span>Baixar Base</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4 align-items-stretch">
+      <div class="col-12 col-xl-6 d-flex">
+        <div class="box w-100 h-100 grafico-container painel-barras">
+          <div class="grafico-header flex-column flex-sm-row gap-3">
+            <div>
+              <span class="secao-label">Vis&atilde;o Quantitativa</span>
+              <h2 class="titulo-secao">Situa&ccedil;&atilde;o dos Estudantes</h2>
+            </div>
+            <div class="slider-container w-100 w-sm-50">
+              <span class="slider-label">2017</span>
+              <input type="range" min="2017" max="2024" step="1" id="yearRange" value="2024" class="w-100">
+              <span class="slider-label">2024</span>
+            </div>
+          </div>
+
+          <div class="ano-display">
+            <span id="selectedYearDisplay">2024</span>
+          </div>
+
+          <div class="grafico-area" style="position: relative; height: 300px;">
+            <canvas id="grafico-barras"></canvas>
+          </div>
+
+          <div class="legenda">
+            <div class="legenda-item"><span class="cor cor-retidos"></span>Retidos</div>
+            <div class="legenda-item"><span class="cor cor-concluidos"></span>Conclu&iacute;dos</div>
+            <div class="legenda-item"><span class="cor cor-evadidos"></span>Evadidos</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-6 d-flex">
+        <div class="box w-100 h-100 grafico-container painel-ranking">
+          <div class="grafico-header flex-column flex-sm-row gap-3">
+            <div>
+              <span class="secao-label">Ranking</span>
+              <h2 class="titulo-secao">&Iacute;ndice de Efici&ecirc;ncia Acad&ecirc;mica</h2>
+            </div>
+            <div class="d-flex gap-2 w-100 w-sm-auto justify-content-sm-end">
+              <select id="metrica1" class="form-select border-2 shadow-sm">
+                <option value="campus">Campus</option>
+                <option value="instituicao">Institui&ccedil;&atilde;o</option>
+                <option value="estado">Estado</option>
+                <option value="regiao">Regi&atilde;o</option>
+              </select>
+              <select id="metrica2" class="form-select border-2 shadow-sm">
+                <option value="2024">2024</option>
+                <option value="2023">2023</option>
+                <option value="2022">2022</option>
+                <option value="2021">2021</option>
+                <option value="2020">2020</option>
+                <option value="2019">2019</option>
+                <option value="2018">2018</option>
+                <option value="2017">2017</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grafico-area" style="position: relative; height: 300px;">
+            <canvas id="ranking"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+  <script src="./js/script.js"></script>
+  <script src="./js/graficoLinhas.js" defer></script>
+  <script src="./js/graficoRank.js"></script>
+  <script src="./js/graficoBarras.js" defer></script>
+  <script src="./js/menuLateral.js"></script>
+</body>
+
+</html>
