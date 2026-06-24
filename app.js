@@ -28,7 +28,7 @@ const MULTIPLOS = {
   w: 1.8,
   h: 1.1,
   x: [-1.95, 0, 1.95],
-  y: [2.55, 1.35],
+  y: [2.15, 0.95],
   z: -3.8
 };
 
@@ -580,11 +580,11 @@ function showMapSelection() {
 
 // ---- Mapa do Brasil: hotspots por regiao (olhar/hover revela; clique faz drill). ----
 const MAP_HOTSPOTS = [
-  { id: "norte", x: -0.395, y: 0.506, w: 1.6, h: 0.9 },
-  { id: "nordeste", x: 0.56, y: 0.367, w: 0.95, h: 0.95 },
-  { id: "centro-oeste", x: -0.084, y: -0.12, w: 1.1, h: 0.65 },
-  { id: "sudeste", x: 0.539, y: -0.345, w: 0.7, h: 0.6 },
-  { id: "sul", x: 0.02, y: -0.694, w: 1.0, h: 0.7 },
+  { id: "norte", x: -0.331, y: 0.649, w: 1.15, h: 0.7 },
+  { id: "nordeste", x: 0.819, y: 0.374, w: 0.52, h: 0.62 },
+  { id: "centro-oeste", x: -0.003, y: -0.072, w: 0.6, h: 0.64 },
+  { id: "sudeste", x: 0.584, y: -0.346, w: 0.52, h: 0.45 },
+  { id: "sul", x: 0.14, y: -0.886, w: 0.34, h: 0.45 },
 ];
 let regionRanks = null;
 
@@ -890,6 +890,8 @@ async function enterIndicators(ctx) {
   setEntityVisible(dom.explorationWorld, true);
   setEntityVisible(dom.timelineView, false);
   setEntityVisible(dom.composicaoView, false);
+  setEntityVisible(dom.multiplosView, false);
+  setEntityVisible(dom.tourPanel, false);
   setEntityVisible(dom.indicatorView, true);
   hideInfoPanelNow();
   dom.hudLegend.hidden = true;
@@ -1285,6 +1287,8 @@ function enterComposicao() {
   setEntityVisible(dom.indicatorView, false);
   hideInfoPanelNow();
   setEntityVisible(dom.timelineView, false);
+  setEntityVisible(dom.multiplosView, false);
+  setEntityVisible(dom.tourPanel, false);
   setEntityVisible(dom.composicaoView, true);
   setEntityVisible(dom.contextKicker, false);
   setEntityVisible(dom.contextTitle, false);
@@ -1506,6 +1510,8 @@ function enterTimeline(key, skipGuided) {
   const indicador = indicadorByKey(key);
   setEntityVisible(dom.indicatorView, false);
   setEntityVisible(dom.composicaoView, false);
+  setEntityVisible(dom.multiplosView, false);
+  setEntityVisible(dom.tourPanel, false);
   hideInfoPanelNow();
   setEntityVisible(dom.timelineView, true);
   dom.compLegend.hidden = true;
@@ -2276,6 +2282,7 @@ async function tourGoTo(n, skipFade) {
   setEntityVisible(dom.indicatorView, false);
   setEntityVisible(dom.timelineView, false);
   setEntityVisible(dom.composicaoView, false);
+  setEntityVisible(dom.multiplosView, false);
   setEntityVisible(dom.tourPanel, false);
   hideInfoPanelNow();
 
@@ -2654,8 +2661,8 @@ function buildTourGallery() {
       width: 2.0, align: "left", anchor: "left", color: tour.cor, font: "kelsonsans",
     });
     const titulo = el("a-text", {
-      value: tour.titulo, position: "-0.7 0.22 0.06",
-      width: 2.4, align: "center", color: "#ffffff", font: "kelsonsans",
+      value: tour.titulo, position: "0 0.22 0.06",
+      width: 1.9, align: "center", color: "#ffffff", font: "kelsonsans",
     });
     const desc = el("a-text", {
       value: tour.descricao, position: "0 -0.04 0.06",
@@ -3161,6 +3168,9 @@ function buildMultiplosSelectors() {
         state.indicatorKey = ind.key;
         buildMultiplosSelectors();
         buildMultiplos();
+        // Os botoes/paineis reconstruidos sao novos no DOM: re-aplica .clickable e
+        // atualiza o raycaster, senao so o primeiro clique (do enterMultiplos) funciona.
+        setInteractionMode("multiplos");
       }
     });
     bg.addEventListener("mouseenter", () => {
@@ -3171,6 +3181,7 @@ function buildMultiplosSelectors() {
     });
     
     dom.multiplosSelectors.appendChild(btn);
+    applyPendingTransforms(btn);
     currentX += w + 0.2;
   });
 }
@@ -3203,9 +3214,12 @@ function buildMultiplos() {
     const diff = Math.abs(maxReg.val - minReg.val).toFixed(1).replace(".", ",");
     const pontaStr = indDef.sentido === "negativo" ? "pior" : "lidera";
     const baseStr = indDef.sentido === "negativo" ? "melhor" : "na lanterna";
-    dom.multiplosTitle.setAttribute("value", `${indDef.label} por regiao (2024): ${maxReg.ctx.nome} ${pontaStr} (${fmt(maxReg.val)}%), ${minReg.ctx.nome} ${baseStr} (${fmt(minReg.val)}%) — ${diff} pp de diferenca.`);
+    // Titulo curto (1 linha) + detalhe na nota, para nao encavalar o cabecalho.
+    dom.multiplosTitle.setAttribute("value", `${indDef.label} por regiao (2024)`);
+    dom.multiplosNote.setAttribute("value", `${maxReg.ctx.nome} ${pontaStr} (${fmt(maxReg.val)}%)  ·  ${minReg.ctx.nome} ${baseStr} (${fmt(minReg.val)}%)  —  ${diff} pp de diferenca`);
   } else {
     dom.multiplosTitle.setAttribute("value", `${indDef.label} por regiao (2024)`);
+    dom.multiplosNote.setAttribute("value", "");
   }
   
   items.forEach((item, index) => {
@@ -3264,8 +3278,11 @@ function buildMultiplos() {
     panel.append(bg, title, valText, hit);
     buildMiniChart(panel, item.ctx, key, DADOS.brasil);
     dom.multiplosGrid.appendChild(panel);
+    // Aplica as transformacoes (posicao do painel + filhos) no object3D; sem isto o
+    // painel fica na origem do mundo e todo o conteudo some do campo de visao.
+    applyPendingTransforms(panel);
   });
-  
+
   crumb("Mapa", "Comparar regioes", indDef.label);
 }
 
