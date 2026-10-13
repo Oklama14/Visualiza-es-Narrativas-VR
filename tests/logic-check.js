@@ -104,15 +104,6 @@ function buildSintese(ctx) {
 }
 
 
-function arcPositions(n, radius, spreadDeg, y) {
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const t = n === 1 ? 0 : i / (n - 1) - 0.5;
-    const a = (t * spreadDeg * Math.PI) / 180;
-    out.push({ x: Math.sin(a) * radius, y, z: -Math.cos(a) * radius });
-  }
-  return out;
-}
 function gridPositions(n, cols, gapX, gapY, topY, z) {
   const out = [];
   for (let i = 0; i < n; i++) {
@@ -203,20 +194,9 @@ console.log(`  callouts fora do x: ${calloutFora}`);
 check(foraGrade === 0, "ha valores fora da escala 0-100%");
 check(calloutFora === 0, "ha callouts projetados fora do grafico");
 
-// 4) FOV dos cards de contexto (arc) e drill (grid) + objetos de indicador.
+// 4) FOV dos cards de drill (grid) + objetos de indicador.
+//    (os antigos cards de contexto em arco sairam do app: a selecao virou o mapa.)
 console.log("\n[4] Campo de visao (FOV)");
-const N_CTX = 6, CARD_W = 1.36;
-const cards = arcPositions(N_CTX, 4.6, 100, 1.6);
-cards.forEach((p, i) => check(dentroFOV(p.x, p.y, p.z), `card de contexto ${i} fora do FOV (${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)})`));
-// Sobreposicao: distancia entre centros adjacentes deve ser maior que a largura do card.
-let minGap = Infinity;
-for (let i = 0; i < cards.length - 1; i++) {
-  const a = cards[i], b = cards[i + 1];
-  const d = Math.hypot(b.x - a.x, b.z - a.z);
-  minGap = Math.min(minGap, d - CARD_W);
-}
-console.log(`  cards de contexto: ${N_CTX}, menor folga entre vizinhos: ${minGap.toFixed(2)}`);
-check(minGap > 0.05, `cards de contexto se sobrepoem (folga ${minGap.toFixed(2)})`);
 
 // drill: regiao com mais instituicoes
 let maxReg = DADOS.regioes[0];

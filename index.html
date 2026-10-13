@@ -8,13 +8,29 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050711'/%3E%3Ccircle cx='32' cy='32' r='18' fill='%2355d6ff'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=8" />
-    <!-- A-Frame fornece a cena 3D, WebXR, camera, cursor e raycaster. -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <link rel="stylesheet" href="styles.css?v=13" />
+    <!-- A-Frame (cena 3D, WebXR, camera, cursor, raycaster).
+         Tenta a copia LOCAL (funciona offline); se ela nao existir/falhar,
+         cai automaticamente no CDN. Para ativar o modo offline, baixe o
+         aframe.min.js 1.5.0 e salve como assets/aframe-1.5.0.min.js. -->
+    <script src="assets/aframe-1.5.0.min.js"></script>
+    <script>
+      if (!window.AFRAME) {
+        document.write('<scr' + 'ipt src="https://aframe.io/releases/1.5.0/aframe.min.js"><\/scr' + 'ipt>');
+      }
+    </script>
   </head>
   <body>
     <div id="transitionOverlay" aria-hidden="true"></div>
     <div class="vignette" aria-hidden="true"></div>
+
+    <!-- Indicador de carregamento: cobre a cena ate dados + A-Frame prontos. -->
+    <div class="loading-overlay" id="loadingOverlay" role="status" aria-live="polite">
+      <div class="loading-card">
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <span class="loading-text" id="loadingText">Carregando o laboratorio de dados…</span>
+      </div>
+    </div>
 
     <main class="screen-frame" aria-label="Laboratorio VR de Dados">
       <div class="brand-panel">
@@ -65,11 +81,11 @@
 
     <a-scene
       id="scene"
-      renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true; exposure: 1.1"
+      renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true; exposure: 1.1; foveationLevel: 1; highRefreshRate: true"
       cursor="rayOrigin: mouse; fuse: false"
       raycaster="objects: .clickable; far: 40; interval: 16"
       fog="type: linear; color: #070b16; near: 11; far: 34"
-      background="color: #05070f"
+      background="color: #000000"
       vr-mode-ui="enabled: true"
     >
       <a-assets>
@@ -77,7 +93,7 @@
           id="softText"
           text="font: kelsonsans; align: center; anchor: center; baseline: center"
         ></a-mixin>
-        <img id="mapImgAsset" src="assets/mapa-brasil.png?v=8" crossorigin="anonymous" />
+        <img id="mapImgAsset" src="assets/mapa-brasil.png?v=13" crossorigin="anonymous" />
       </a-assets>
 
       <!-- Camera compartilhada: mouse no desktop e cursor gaze em VR. -->
@@ -115,7 +131,37 @@
             <a-plane width="1.4" height="0.16" material="color: #000000; opacity: 0.65; transparent: true; shader: flat"></a-plane>
             <a-text id="captionText" value="" position="0 0 0.01" width="1.3" align="center" color="#ffffff" font="kelsonsans" wrap-count="60"></a-text>
           </a-entity>
+
+          <!-- HUD de contexto para VR: o HUD 2D (breadcrumb + nota "Como ler") nao
+               aparece no headset, entao espelhamos o essencial aqui, fixo a camera na
+               base do campo de visao. Visivel apenas em VR (ligado em enter-vr). -->
+          <a-entity id="vrHud" position="0 -0.66 -1.15" visible="false">
+            <a-plane width="1.46" height="0.5" material="color: #0a1220; opacity: 0.82; transparent: true; shader: flat"></a-plane>
+            <a-plane width="1.46" height="0.014" position="0 0.235 0.002" material="color: #4cc9f0; opacity: 0.7; transparent: true; shader: flat"></a-plane>
+            <a-text id="vrCrumb" value="" position="-0.69 0.18 0.01" width="1.7" align="left" anchor="left" color="#8fb3dd" font="kelsonsans" wrap-count="52"></a-text>
+            <a-text id="vrNotaKicker" value="COMO LER" position="-0.69 0.075 0.01" width="1.9" align="left" anchor="left" color="#87dcff" font="kelsonsans"></a-text>
+            <a-text id="vrNotaTitle" value="" position="-0.69 -0.01 0.01" width="1.5" align="left" anchor="left" color="#ffffff" font="kelsonsans" wrap-count="42"></a-text>
+            <a-text id="vrNotaBody" value="" position="-0.69 -0.13 0.01" width="1.42" align="left" anchor="left" color="#b9c8de" font="kelsonsans" wrap-count="50"></a-text>
+          </a-entity>
         </a-entity>
+
+        <!-- Controles Touch do Quest (laser + gatilho). Invisiveis e com raycaster
+             desligado por padrao; ligam quando um controle conecta (so em VR),
+             sem gerar mira fantasma no desktop. -->
+        <a-entity
+          id="rightHand"
+          visible="false"
+          laser-controls="hand: right"
+          raycaster="objects: .clickable; far: 40; interval: 16; showLine: true; lineColor: #4cc9f0; lineOpacity: 0.75; enabled: false"
+          cursor="fuse: false; downEvents: triggerdown; upEvents: triggerup; rayOrigin: entity"
+        ></a-entity>
+        <a-entity
+          id="leftHand"
+          visible="false"
+          laser-controls="hand: left"
+          raycaster="objects: .clickable; far: 40; interval: 16; showLine: true; lineColor: #4cc9f0; lineOpacity: 0.75; enabled: false"
+          cursor="fuse: false; downEvents: triggerdown; upEvents: triggerup; rayOrigin: entity"
+        ></a-entity>
       </a-entity>
 
       <!-- ============================================================= -->
@@ -246,8 +292,6 @@
           </a-entity>
         </a-entity>
 
-        <!-- (legado) cards em arco - nao usados na visao de mapa. -->
-        <a-entity id="contextCards" visible="false"></a-entity>
         <!-- Cards de instituicoes (drill-down), preenchidos ao escolher uma regiao. -->
         <a-entity id="drillCards" visible="false"></a-entity>
 
@@ -349,7 +393,7 @@
           </a-entity>
 
           <!-- Painel interpretativo do indicador (hover/clique). -->
-          <a-entity id="infoPanel" visible="false" position="0 2.2 -2.6" scale="0.9 0.9 0.9">
+          <a-entity id="infoPanel" visible="false" position="0 2.2 -2.6" scale="0.85 0.85 0.85">
             <a-plane
               width="3.7"
               height="1.2"
@@ -468,41 +512,45 @@
             <a-text value="Pular introducao" position="0 0 0.06" width="2.9" align="center" color="#cfe9ff" font="kelsonsans"></a-text>
           </a-entity>
 
-          <!-- Controles do Tour guiado (Anterior / progresso / Proximo). -->
-          <a-entity id="tourControls" visible="false" position="0 0.24 -2.45">
-            <a-entity id="tourPrevBtn" position="-2.2 0 0">
-              <a-box class="tour-clickable" width="1.3" height="0.44" depth="0.08" material="color: #1a1a4e; roughness: 0.45; emissive: #7b61ff; emissiveIntensity: 0.2"></a-box>
-              <a-text value="< Anterior" position="0 0 0.06" width="2.2" align="center" color="#d8ccff" font="kelsonsans"></a-text>
-            </a-entity>
-            <a-text id="tourProgress" value="1 / 7" position="0 0 0" width="2.4" align="center" color="#ffffff" font="kelsonsans"></a-text>
-            <a-entity id="tourNextBtn" position="2.2 0 0">
-              <a-box class="tour-clickable" width="1.6" height="0.44" depth="0.08" material="color: #1a1a4e; roughness: 0.45; emissive: #7b61ff; emissiveIntensity: 0.25"></a-box>
-              <a-text id="tourNextLabel" value="Proximo >" position="0 0 0.06" width="2.6" align="center" color="#d8ccff" font="kelsonsans"></a-text>
-            </a-entity>
+        </a-entity>
+
+        <!-- Controles do Tour guiado (Anterior / progresso / Proximo).
+             Ficam FORA de #timelineView: o tour tambem passa por cenas de
+             composicao, de indicadores e por paineis de texto, e dentro da
+             timeline eles sumiam justamente nessas cenas. -->
+        <a-entity id="tourControls" visible="false" position="0 0.24 -2.45">
+          <a-entity id="tourPrevBtn" position="-2.2 0 0">
+            <a-box class="tour-clickable" width="1.3" height="0.44" depth="0.08" material="color: #1a1a4e; roughness: 0.45; emissive: #7b61ff; emissiveIntensity: 0.2"></a-box>
+            <a-text value="< Anterior" position="0 0 0.06" width="2.2" align="center" color="#d8ccff" font="kelsonsans"></a-text>
+          </a-entity>
+          <a-text id="tourProgress" value="1 / 7" position="0 0 0" width="2.4" align="center" color="#ffffff" font="kelsonsans"></a-text>
+          <a-entity id="tourNextBtn" position="2.2 0 0">
+            <a-box class="tour-clickable" width="1.6" height="0.44" depth="0.08" material="color: #1a1a4e; roughness: 0.45; emissive: #7b61ff; emissiveIntensity: 0.25"></a-box>
+            <a-text id="tourNextLabel" value="Proximo >" position="0 0 0.06" width="2.6" align="center" color="#d8ccff" font="kelsonsans"></a-text>
           </a-entity>
         </a-entity>
 
         <!-- ---- Sub-modo C: composicao "Para onde vao os alunos". ---- -->
         <a-entity id="composicaoView" visible="false">
-          <a-circle id="compGlow" position="0 1.85 -3.7" radius="4.0" material="color: #3ad29f; opacity: 0.05; transparent: true; shader: flat; side: double"></a-circle>
-          <a-plane id="compPanel" position="0 1.85 -3.4" width="7.4" height="1.95" material="color: #0a1022; opacity: 0.6; transparent: true; shader: flat"></a-plane>
+          <a-circle id="compGlow" position="0 1.72 -3.7" radius="4.0" material="color: #3ad29f; opacity: 0.05; transparent: true; shader: flat; side: double"></a-circle>
+          <a-plane id="compPanel" position="0 1.72 -3.4" width="7.9" height="1.9" material="color: #0a1022; opacity: 0.6; transparent: true; shader: flat"></a-plane>
           <a-entity id="compScene"></a-entity>
 
-          <a-text id="compTitle" value="" position="0 3.62 -3.9" color="#ffffff" width="5.4" align="center" wrap-count="40" font="kelsonsans"></a-text>
-          <a-text id="compText" value="" position="0 3.02 -3.9" color="#bcd0ec" width="5.6" align="center" wrap-count="64" font="kelsonsans"></a-text>
-          <a-text id="compReadout" value="" position="0 0.7 -3.0" color="#9be7ff" width="6" align="center" wrap-count="76" font="kelsonsans"></a-text>
+          <a-text id="compTitle" value="" position="0 3.4 -3.9" color="#ffffff" width="5.6" align="center" wrap-count="46" font="kelsonsans"></a-text>
+          <a-text id="compText" value="" position="0 2.94 -3.9" color="#bcd0ec" width="5.6" align="center" wrap-count="64" font="kelsonsans"></a-text>
+          <a-text id="compReadout" value="" position="0 0.56 -3.0" color="#9be7ff" width="5.4" align="center" wrap-count="76" font="kelsonsans"></a-text>
 
           <a-entity id="compScrubber" position="0 0.24 -2.45">
-            <a-entity id="compPrev" position="-1.6 0 0">
+            <a-entity id="compPrev" position="-1.7 0 0">
               <a-box class="composicao-clickable" width="0.56" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
               <a-text value="<" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
             </a-entity>
-            <a-text id="compYearLabel" value="2024" position="-1.05 0 0" width="2.3" align="center" color="#ffffff" font="kelsonsans"></a-text>
-            <a-entity id="compNext" position="-0.5 0 0">
+            <a-text id="compYearLabel" value="2024" position="-1.15 0 0" width="2.3" align="center" color="#ffffff" font="kelsonsans"></a-text>
+            <a-entity id="compNext" position="-0.6 0 0">
               <a-box class="composicao-clickable" width="0.56" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
               <a-text value=">" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
             </a-entity>
-            <a-entity id="compBack" position="1.4 0 0">
+            <a-entity id="compBack" position="1.15 0 0">
               <a-box class="composicao-clickable" width="1.6" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
               <a-text value="Indicadores" position="0 0 0.06" width="2.4" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
             </a-entity>
@@ -511,20 +559,21 @@
 
         <!-- ---- Sub-modo D: Small Multiples (Comparacao Regional). ---- -->
         <a-entity id="multiplosView" visible="false">
-          <!-- header/narrativa -->
-          <a-text id="multiplosTitle" value="" position="0 3.5 -4.0" color="#ffffff" width="5.6" align="center" wrap-count="40" font="kelsonsans"></a-text>
-          <a-text id="multiplosNote" value="" position="0 3.16 -4.0" color="#bcd0ec" width="5.8" align="center" wrap-count="62" font="kelsonsans"></a-text>
+          <!-- header/narrativa (uma linha cada: titulo curto + nota curta) -->
+          <a-text id="multiplosTitle" value="" position="0 3.46 -4.0" color="#ffffff" width="4.8" align="center" wrap-count="42" font="kelsonsans"></a-text>
+          <a-text id="multiplosNote" value="" position="0 3.12 -4.0" color="#bcd0ec" width="5.6" align="center" wrap-count="64" font="kelsonsans"></a-text>
 
-          <a-entity id="multiplosLegend" position="0 2.84 -4.0">
+          <!-- seletores de indicador (linha unica, abaixo do cabecalho) -->
+          <a-entity id="multiplosSelectors" position="0 2.7 -4.0"></a-entity>
+
+          <!-- legenda no rodape da grade (fora do caminho do HUD 2D) -->
+          <a-entity id="multiplosLegend" position="0 0.16 -3.7">
             <a-plane width="0.3" height="0.02" position="-1.2 0 0" material="color: #4cc9f0; shader: flat; opacity: 0.6"></a-plane>
             <a-text value="Regiao" position="-0.95 0 0" width="2.0" align="left" anchor="left" color="#cfe0f4" font="kelsonsans"></a-text>
             <a-plane width="0.1" height="0.015" position="0.3 0 0" material="color: #9fb0d0; shader: flat; opacity: 0.4"></a-plane>
             <a-plane width="0.1" height="0.015" position="0.45 0 0" material="color: #9fb0d0; shader: flat; opacity: 0.4"></a-plane>
             <a-text value="Media Brasil" position="0.55 0 0" width="2.0" align="left" anchor="left" color="#9fb0d0" font="kelsonsans"></a-text>
           </a-entity>
-
-          <!-- seletores de indicador (e.g. botoes no topo) -->
-          <a-entity id="multiplosSelectors" position="0 4.05 -3.8"></a-entity>
 
           <!-- container da grade -->
           <a-entity id="multiplosGrid"></a-entity>
@@ -594,6 +643,6 @@
       </a-entity>
     </a-scene>
 
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=13"></script>
   </body>
 </html>

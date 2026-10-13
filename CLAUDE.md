@@ -115,6 +115,20 @@ absolutas e eventos. O bloco 11 cobre o small multiples: ordenacao por `sentido`
 sem `NaN/undefined` e coerencia rotulo-x-dado (a "ponta" tem o valor extremo correto).
 Rode com `node .\tests\logic-check.js`.
 
+Ha `tests/flow-check.js` (sem navegador, precisa do jsdom): carrega `index.html` + `app.js`
+com o A-Frame stubado e percorre selecao -> indicadores -> timeline -> composicao ->
+comparar regioes -> 3 tours -> drill, conferindo estado, textos gerados e clickables
+fantasmas (elemento invisivel com `.clickable`) em cada transicao. Instale so para testar:
+`npm install --no-save jsdom` e rode `node .\tests\flow-check.js` (sem o jsdom ele se
+auto-pula). E o teste mais proximo do smoke-test que roda sem Chrome.
+
+Ha ainda `tests/layout-check.js` (sem navegador): projeta os blocos de texto/painel de
+cada etapa no espaco de tela (camera 0 1.6 0, FOV vertical 80) e acusa sobreposicao
+vertical, folga curta (< 1% da altura da tela), texto que estoura a caixa e blocos que
+caem atras dos paineis 2D do HUD (canto superior esquerdo e nota do rodape). A altura de
+linha do `a-text` e estimada por `2,3 x width / (wrapCount + 0,5)`. Rode sempre que mexer
+em posicao/tamanho de texto: `node .\tests\layout-check.js`.
+
 ## Modelo de dados (dados.json)
 
 ```
@@ -138,6 +152,8 @@ junto do percentual. Valores % podem ser `null` quando nao ha matriculas (render
 
 ## Fluxo de experiencia (hibrido, 3 etapas)
 
+0. A selecao antiga em cards de arco (`buildContextCards`/`createContextCard`/`arcPositions`
+   e a entidade `#contextCards`) foi REMOVIDA - a tela inicial e o mapa. Nao reintroduza.
 1. Selecao de contexto: MAPA do Brasil (`assets/mapa-brasil.png`) com 5 hotspots de regiao -
    olhar/hover mostra um cartao com Eficiencia/Evasao 2024 + comentario automatico; clicar
    abre o drill-down. Botao "Brasil" (visao nacional) e botao "Tour guiado" ao lado.
@@ -146,7 +162,8 @@ junto do percentual. Valores % podem ser `null` quando nao ha matriculas (render
 3. Indicadores (ambiente escuro): os 4 indicadores do contexto como MEDIDORES RADIAIS
    (gauge) sobre pedestais - um arco preenche de 0 a 100% conforme o valor de 2024, com o
    numero no centro (linguagem unica para os 4, comparavel). Geometria em `GAUGE` no `app.js`.
-   Hover abre painel interpretativo; clique abre a linha do tempo.
+   Hover abre painel interpretativo (e esconde o `contextLead`, que ocupa a mesma faixa
+   de tela); clique abre a linha do tempo. O hover NAO abre mais os conectores causais.
 4. Linha do tempo (grafico anotado): eixo com grade de % (0-100), linha de tendencia com
    marcadores por ano, callouts de pico/vale com linha-guia e manchete narrativa.
    Nesta etapa o cabecalho generico (kicker/titulo/lead) e ocultado e a manchete narrativa
@@ -159,6 +176,10 @@ junto do percentual. Valores % podem ser `null` quando nao ha matriculas (render
 5. Composicao "Para onde vao os alunos" (etapa C, a partir dos indicadores): barras
    empilhadas a 100% por ano (concluidos/retidos/evadidos) + anel do ano em foco e numeros
    absolutos. Usa `series.contagens`. Botao "Indicadores" volta ao passo 3.
+   Como as barras sao 100% empilhadas, elas SEMPRE chegam ao topo: `COMP.baseY + COMP.maxH`
+   define o teto real da cena e precisa ficar abaixo do bloco de narrativa (`compText`).
+   O titulo usa `rotuloCurto` (sigla nas instituicoes) para caber em 1 linha e o "fio
+   causal" do `compReadout` e uma frase curta, de 1 linha.
 6. Comparacao regional (small multiples): ponto de entrada proprio no MAPA (botao
    "Comparar regioes", ao lado de "Brasil" e "Tour guiado"). Grade 3x2 de mini-graficos
    (Brasil + 5 regioes) do mesmo indicador, na MESMA escala 0-100% - a desigualdade vira
@@ -194,7 +215,14 @@ Classes de clickable por modo (controladas por `setInteractionMode(mode)`):
 - `.minimap-clickable`: mini-mapa hot-swap (indicadores, timeline, composicao, tour) - NAO no modo "multiplos".
 
 `setInteractionMode` garante que apenas o modo visivel tenha `.clickable`, evitando
-cliques fantasmas. Importante: nao deixe elementos ocultos com `.clickable` ativo.
+cliques fantasmas. `toggleClickable` so liga a classe se `isEntityVisible(entity)` for
+verdadeiro (o elemento e todos os ancestrais visiveis), entao um painel oculto nunca
+rouba clique/gaze - por isso as views precisam ficar visiveis ANTES de chamar
+`setInteractionMode`. Importante: nao deixe elementos ocultos com `.clickable` ativo.
+
+`#tourControls` (Anterior/progresso/Proximo) fica FORA de `#timelineView`, direto em
+`#explorationWorld`: o tour tambem passa por cenas de composicao, de indicadores e por
+paineis de texto, e dentro da timeline os botoes sumiam justamente nessas cenas.
 
 ## Desktop vs VR
 
@@ -219,7 +247,12 @@ Os objetos ficam apoiados no piso (y=0). Nao recolocar os planos gigantes de pis
 - `setEntityVisible` atualiza tanto o atributo A-Frame quanto `object3D.visible`.
 - Os hitboxes invisiveis devem ser grandes para gaze, mas sem sobrepor vizinhos.
 - Os controles da timeline ficam num layout compacto e centrado para projetar dentro do FOV.
-- Durante transicoes, `state.transitioning` bloqueia novas acoes.
+- Durante transicoes, `state.transitioning` bloqueia novas acoes. As funcoes async de
+  navegacao (`enterIndicators`, `enterDrill`, `enterMultiplos`, `returnToSelection`,
+  `startTour`, `tourGoTo`) marcam a flag e SEMPRE a devolvem num `finally` - sem isso,
+  uma excecao no meio da transicao trava a experiencia inteira sem erro visivel.
+  Em `tourGoTo`/`enterMultiplos` quem libera e quem assumiu (`assumiuTransicao`/`skipFade`),
+  porque elas tambem sao chamadas de dentro de outra transicao.
 - A narrativa automatica (`computeNarrative`) espelha a logica do projeto do colega:
   primeiro/ultimo ano, tendencia (crescimento/reducao/estabilidade) e ponto critico.
   Tambem produz a `manchete` (headline) e uma clausula comparativa vs. media nacional.
@@ -227,11 +260,29 @@ Os objetos ficam apoiados no piso (y=0). Nao recolocar os planos gigantes de pis
   (vs. media nacional para regiao/instituicao, ou "+/- pp desde <ano>" para o Brasil).
   Regra de integridade: nenhuma afirmacao e fixa; tudo vem dos dados. Eventos de contexto
   (`DADOS.eventos`) so com fonte verificavel (hoje, apenas 2020/pandemia).
-- Small multiples: geometria da grade em `MULTIPLOS`; `enterMultiplos`/`buildMultiplos`/
+- Small multiples: geometria da grade em `MULTIPLOS` (inclui o layout interno do painel:
+  `headerY`, `chartTop`, `chartBottom`, `chartPadX`); `enterMultiplos`/`buildMultiplos`/
   `buildMultiplosSelectors`/`buildMiniChart` montam a etapa. IMPORTANTE: as linhas dos
   mini-graficos usam `addLineSegments` (linha da regiao) e `addDashedSegments` (referencia
   tracejada do Brasil) - nunca `meshline` ou outra lib externa (so A-Frame). Rotulos e
   manchete leem `indicador.label` (NAO `.titulo`, que nao existe no `dados.json`).
+  A ordem vertical e cabecalho (titulo + nota, 1 linha cada) -> seletores -> grade -> legenda;
+  a frase longa do "abismo" vai para o HUD 2D (`multiplosSubtitle`), nao para a cena.
+- Texto ancorado: `a-text` com `align: left/right` E `anchor: left/right`. Sem o `anchor`,
+  o bloco continua centrado na posicao e o texto invade o vizinho (foi o que fazia o nome
+  da regiao e o valor de um painel do small multiples baterem no painel ao lado, e os
+  rotulos de % entrarem na area das barras).
+- Relacao causal (`buildIndicatorLinks` + `CAUSAL`): NAO existem mais linhas 3D entre os
+  medidores (a linha Evasao -> Eficiencia passava exatamente sobre o medidor de Conclusao).
+  A relacao virou um painel-equacao com chips (fator + valor + efeito ELEVA/REDUZ/DEPRIME)
+  e o chip de resultado. Ele so aparece nas cenas de tour com `showLinks: true`
+  (`showIndicatorLinks(true)`), nunca no hover, e nessas cenas o cabecalho de contexto
+  (kicker/titulo/lead) fica oculto para nao empilhar dois blocos na mesma altura.
+- Comparacao: `resolveCompareContext` devolve `null` para o Brasil (ele e a propria
+  referencia). `updateCompareButton` apaga o botao e escreve "Comparar (n/d)" nesse caso,
+  em vez de deixar um botao ativo que nao faz nada.
+- Legendas de narracao: `setCaption` escreve em `#captionText` (o id precisa estar na
+  lista de `dom`, senao o painel aparece vazio).
 - A abertura guiada usa `state.guidedToken`: ao sair da timeline ou pular, o token e
   incrementado e o loop assincrono para. Sempre incremente o token antes de trocar de etapa.
 - Geometria do grafico centralizada em `CHART`; helpers `xFor(i)`/`yFor(v)` convertem
@@ -257,7 +308,13 @@ headset). A placa `#roomSign` na sala resume os controles tambem para VR.
 - Preserve compatibilidade desktop e VR.
 - Se mudar o CSV, rode `node .\build-dados.js` para regenerar `dados.json`.
 - Depois de qualquer alteracao visual ou de interacao, rode `node .\tests\smoke-test.js`.
+- Depois de mexer em texto/posicao de painel, rode `node .\tests\layout-check.js` (0 falhas
+  e, de preferencia, 0 avisos).
+- Depois de mexer em fluxo/estado/interacao, rode `node .\tests\flow-check.js`.
+- Ao alterar `app.js` ou `styles.css`, suba o `?v=N` no `index.html` (cache do navegador).
 - Se alterar posicoes/tamanhos/hitboxes, verifique se os cliques nao acertam objetos vizinhos
   e se os controles continuam dentro do campo de visao.
+- Banda segura da tela: mantenha os blocos entre ~20% e ~74% da altura. Acima disso fica o
+  painel HUD (canto superior esquerdo) e abaixo a nota "Como ler esta visualizacao".
 - Evite remover `setInteractionMode`, pois ele protege contra raycaster em objetos ocultos.
 ```

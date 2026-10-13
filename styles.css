@@ -256,6 +256,63 @@ a-scene {
   opacity: 1;
 }
 
+/* Indicador de carregamento (acima de tudo ate a cena ficar pronta). */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #05070f;
+  color: var(--text);
+}
+
+.loading-overlay[hidden] {
+  display: none;
+}
+
+.loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+}
+
+.loading-spinner {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid rgba(124, 199, 255, 0.2);
+  border-top-color: #4cc9f0;
+  animation: vrlab-spin 0.9s linear infinite;
+}
+
+.loading-overlay.is-error .loading-spinner {
+  display: none;
+}
+
+.loading-text {
+  max-width: 340px;
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #cfe0f4;
+}
+
+.loading-overlay.is-error .loading-text {
+  color: #ffb4b4;
+}
+
+@keyframes vrlab-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner { animation: none; }
+}
+
 .hud-legend {
   position: absolute;
   left: clamp(16px, 4vw, 44px);

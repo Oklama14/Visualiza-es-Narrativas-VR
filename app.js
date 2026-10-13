@@ -22,15 +22,27 @@ const CHART = {
   z: -3.3, // barras/linha/marcadores ficam a frente do painel (-3.4)
 };
 
+// Grade do small multiples. As faixas verticais foram calculadas para caber na
+// "banda segura" da tela (entre o painel HUD do topo e a nota do rodape), com
+// folga entre cabecalho -> seletores -> grade -> legenda (sem texto encavalado).
 const MULTIPLOS = {
   cols: 3,
   rows: 2,
   w: 1.8,
-  h: 1.1,
+  h: 0.96,
   x: [-1.95, 0, 1.95],
-  y: [2.15, 0.95],
-  z: -3.8
+  y: [1.88, 0.8],
+  z: -3.9,
+  // Layout interno de cada painel (coordenadas locais).
+  headerY: 0.33, // linha do nome + valor
+  chartTop: 0.16, // 100%
+  chartBottom: -0.36, // 0%
+  chartPadX: 0.2,
 };
+
+// Frase completa do "abismo" regional: fica no HUD 2D (subtitulo) e e restaurada
+// depois do hover em um painel. No 3D exibimos apenas a versao curta (1 linha).
+let multiplosSubtitle = "Comparacao em mesma escala";
 
 const state = {
   stage: "selection", // selection | drill | indicators | timeline | composicao
@@ -51,6 +63,8 @@ const state = {
   tourStep: 0,
   tourId: null,      // A2: id da historia ativa (chave de TOURS)
   tourScenes: null,   // A2: array de cenas da historia ativa
+  history: [],        // pilha de navegacao: cada avanco empilha a tela atual; "Voltar" desempilha
+  usingControllers: false, // VR: ha um controle Touch conectado (laser assume a mira)
 };
 
 // ----------------------------------------------------------------------------
@@ -362,11 +376,11 @@ const NOTAS = {
 
 document.addEventListener("DOMContentLoaded", () => {
   const ids = [
-    "scene", "selectionWorld", "explorationWorld", "contextCards", "drillCards",
+    "scene", "selectionWorld", "explorationWorld", "drillCards",
     "drillBack", "indicatorView", "indicatorObjects", "infoPanel", "infoTitle",
-    "infoValue", "infoDescription", "infoAccent", "infoHint", "contextKicker",
-    "contextTitle", "contextLead", "focusRing", "indicatorGlow", "timelineView",
-    "chartGlow", "chartPanel", "chartGrid", "focusBand", "timelineBars",
+    "infoValue", "infoDescription", "infoAccent", "contextKicker",
+    "contextTitle", "contextLead", "timelineView",
+    "chartGlow", "chartGrid", "focusBand", "timelineBars",
     "compareBars", "trendLine", "markers", "yearTicks", "annotations",
     "valueReadout", "narrativeTitle", "narrativeText", "narrativeYear",
     "guidedHint", "scrubberRow", "actionRow", "ctrlPrevYear", "ctrlNextYear",
@@ -376,20 +390,21 @@ document.addEventListener("DOMContentLoaded", () => {
     "transitionOverlay", "vrFade", "gazeCursor", "cameraRig", "hudTitle",
     "hudSubtitle", "hudLegend", "legendPrimary", "legendCompare", "stageSpot",
     "notaTitle", "notaBody",
-    "compEnter", "composicaoView", "compGlow", "compPanel", "compScene",
-    "compTitle", "compText", "compReadout", "compScrubber", "compYearLabel",
+    "compEnter", "composicaoView", "compScene",
+    "compTitle", "compText", "compReadout", "compYearLabel",
     "compPrev", "compNext", "compBack", "compLegend",
     "onboardOverlay", "onboardStart", "helpBtn",
-    "mapKicker", "mapTitle", "mapView", "mapPanel", "mapHotspots", "brasilBtn",
-    "brasilEfic", "mapPreview", "mapPrevAccent", "mapPrevTitle", "mapPrevVals", "mapPrevComment",
+    "mapKicker", "mapTitle", "mapView", "mapHotspots", "brasilBtn",
+    "brasilEfic", "mapPreview", "mapPrevTitle", "mapPrevVals", "mapPrevComment",
     "tourGallery", "tourControls", "tourPrevBtn", "tourNextBtn", "tourNextLabel",
     "tourProgress", "tourBar", "tourBarFill", "tourBarStep", "tourBarLabel",
     "tourPanel", "tourPanelKicker", "tourPanelTitle", "tourPanelBody", "tourCta",
     "roomSign", "breadcrumb",
-    "miniMapBase", "miniMapTab", "miniMapContent", "miniMapPanel", "miniMapHotspots", "miniBrasilBtn",
+    "miniMapBase", "miniMapTab", "miniMapContent", "miniMapHotspots", "miniBrasilBtn",
     "indicatorLinks", "efficacyPanel",
     "multiplosBtn", "multiplosView", "multiplosTitle", "multiplosNote", "multiplosLegend", "multiplosSelectors", "multiplosGrid",
-    "guidedQuestions", "captionPanel", "visceralParticles",
+    "guidedQuestions", "captionPanel", "captionText", "visceralParticles",
+    "vrHud", "vrCrumb", "vrNotaTitle", "vrNotaBody",
   ];
   ids.forEach((id) => (dom[id] = document.getElementById(id)));
 
@@ -404,7 +419,23 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Falha ao carregar dados.json:", error);
       dom.hudTitle.textContent = "Erro ao carregar os dados";
       dom.hudSubtitle.textContent = "Verifique se dados.json esta no servidor.";
+      const o = document.getElementById("loadingOverlay");
+      if (o) {
+        o.classList.add("is-error");
+        const t = document.getElementById("loadingText");
+        if (t) t.textContent = "Erro ao carregar os dados. Rode via servidor local (node server.js) e recarregue.";
+      }
     });
+
+  // Se ainda estiver carregando apos 15s, provavelmente o A-Frame nao carregou
+  // (offline sem a copia local) — aponta o ajuste exato.
+  window.setTimeout(() => {
+    const o = document.getElementById("loadingOverlay");
+    if (o && !o.hidden && !o.classList.contains("is-error")) {
+      const t = document.getElementById("loadingText");
+      if (t) t.textContent = "Ainda carregando… se estiver offline, salve assets/aframe-1.5.0.min.js no projeto.";
+    }
+  }, 15000);
 });
 
 async function loadData() {
@@ -426,6 +457,12 @@ function initExperience() {
   bindVrCursorMode();
   setNota("selecao");
   setInteractionMode("selection");
+  hideLoading(); // cena + dados prontos: remove o indicador de carregamento.
+}
+
+function hideLoading() {
+  const o = document.getElementById("loadingOverlay");
+  if (o) o.hidden = true;
 }
 
 function setNota(chave) {
@@ -433,11 +470,15 @@ function setNota(chave) {
   if (!nota) return;
   dom.notaTitle.textContent = nota.titulo;
   dom.notaBody.textContent = nota.corpo;
+  if (dom.vrNotaTitle) dom.vrNotaTitle.setAttribute("value", nota.titulo); // espelho 3D p/ VR
+  if (dom.vrNotaBody) dom.vrNotaBody.setAttribute("value", nota.corpo);
 }
 
 // Trilha de navegacao (wayfinding) no HUD.
 function crumb(...parts) {
-  if (dom.breadcrumb) dom.breadcrumb.textContent = parts.filter(Boolean).join("  ›  ");
+  const trilha = parts.filter(Boolean).join("  ›  ");
+  if (dom.breadcrumb) dom.breadcrumb.textContent = trilha;
+  if (dom.vrCrumb) dom.vrCrumb.setAttribute("value", trilha); // espelho 3D p/ VR
 }
 
 // Entrada animada de uma etapa: sobe e assenta (easeOut), dando continuidade
@@ -476,36 +517,8 @@ function dismissOnboarding() {
 }
 
 // ----------------------------------------------------------------------------
-// Etapa 1 - Selecao de contexto e drill-down.
+// Etapa 1 - Selecao de contexto (mapa do Brasil) e drill-down por instituicao.
 // ----------------------------------------------------------------------------
-
-function contextosTopo() {
-  return [DADOS.brasil, ...DADOS.regioes];
-}
-
-function buildContextCards() {
-  dom.contextCards.innerHTML = "";
-  const contextos = contextosTopo();
-  // Arco mais largo e com mais raio: espacamento > largura do card (sem sobreposicao).
-  const positions = arcPositions(contextos.length, 4.6, 100, 1.6);
-
-  contextos.forEach((ctx, index) => {
-    const card = createContextCard(ctx, positions[index], "selection-clickable");
-    card.querySelector(".hit").addEventListener("click", () => onContextCardClick(ctx));
-    dom.contextCards.appendChild(card);
-    applyPendingTransforms(card);
-  });
-}
-
-function onContextCardClick(ctx) {
-  if (state.transitioning) return;
-  if (ctx.tipo === "regiao" && ctx.instituicoes && ctx.instituicoes.length) {
-    openDrill(ctx);
-  } else {
-    state.parentRegion = null;
-    enterIndicators(ctx);
-  }
-}
 
 function openDrill(region) {
   state.stage = "drill";
@@ -520,6 +533,7 @@ function openDrill(region) {
     const isRegion = index === 0;
     const card = createDrillCard(item, positions[index], isRegion);
     card.querySelector(".hit").addEventListener("click", () => {
+      pushHistory(); // vindo do drill -> guarda a tela de drill para o "Voltar".
       if (isRegion) {
         state.parentRegion = null;
         enterIndicators(region);
@@ -555,6 +569,7 @@ function openDrill(region) {
 function closeDrill() {
   state.stage = "selection";
   state.drillRegion = null;
+  state.history = []; // voltou ao mapa: zera a pilha de navegacao.
   setEntityVisible(dom.drillCards, false);
   setEntityVisible(dom.drillBack, false);
   showMapSelection();
@@ -595,14 +610,14 @@ function buildMapa() {
   const efB = latestValue(DADOS.brasil.series.eficiencia);
   dom.brasilEfic.setAttribute("value", efB == null ? "" : `Eficiencia ${fmt(efB)}%`);
   const bHit = dom.brasilBtn.querySelector(".selection-clickable");
-  bHit.addEventListener("click", () => { if (!state.transitioning) { state.parentRegion = null; enterIndicators(DADOS.brasil); } });
+  bHit.addEventListener("click", () => { if (!state.transitioning) { pushHistory(); state.parentRegion = null; enterIndicators(DADOS.brasil); } });
   bHit.addEventListener("mouseenter", () => dom.brasilBtn.setAttribute("animation__h", "property: scale; to: 1.06 1.06 1.06; dur: 150"));
   bHit.addEventListener("mouseleave", () => dom.brasilBtn.setAttribute("animation__h", "property: scale; to: 1 1 1; dur: 150"));
 
   if (dom.multiplosBtn) {
     const mHit = dom.multiplosBtn.querySelector(".selection-clickable");
     if (mHit) {
-      mHit.addEventListener("click", () => { if (!state.transitioning) enterMultiplos("eficiencia"); });
+      mHit.addEventListener("click", () => { if (!state.transitioning) { pushHistory(); enterMultiplos("eficiencia"); } });
       mHit.addEventListener("mouseenter", () => dom.multiplosBtn.setAttribute("animation__h", "property: scale; to: 1.06 1.06 1.06; dur: 150"));
       mHit.addEventListener("mouseleave", () => dom.multiplosBtn.setAttribute("animation__h", "property: scale; to: 1 1 1; dur: 150"));
     }
@@ -750,59 +765,6 @@ function hideRegionPreview() {
   if (dom.mapPreview.object3D && dom.mapPreview.object3D.visible) fadeEntity(dom.mapPreview, false);
 }
 
-function resetSelectionHeader() {
-  dom.selectionKicker.setAttribute("value", "EXPERIENCIA DE DADOS EM REALIDADE VIRTUAL");
-  dom.selectionTitle.setAttribute("value", "Eficiencia Academica da Rede Federal");
-  dom.selectionLead.setAttribute(
-    "value",
-    "Escolha um contexto e percorra a evasao, a conclusao e a eficiencia ao longo de 2017-2024."
-  );
-  dom.hudTitle.textContent = "Escolha um contexto";
-  dom.hudSubtitle.textContent = "Narrativa de eficiencia academica (2017-2024)";
-  setNota("selecao");
-}
-
-function createContextCard(ctx, pos, hitClass) {
-  const eficiencia = latestValue(ctx.series.eficiencia);
-  const isBrasil = ctx.tipo === "brasil";
-  const cor = isBrasil ? "#1d4ed8" : "#1f5e86";
-  const acento = isBrasil ? "#7bdcff" : "#5fe3c0";
-
-  const card = el("a-entity", { position: pos.position, rotation: pos.rotation, scale: "1 1 1" });
-  const glassBack = el("a-box", {
-    width: 1.42, height: 1.02, depth: 0.05, position: "0 0 -0.03",
-    material: `color: #0b1730; opacity: 0.9; transparent: true; roughness: 0.6`,
-  });
-  const face = el("a-box", {
-    class: "card-face", width: 1.36, height: 0.96, depth: 0.06,
-    material: `color: ${cor}; roughness: 0.4; metalness: 0.14; emissive: ${acento}; emissiveIntensity: 0.1`,
-  });
-  const glow = el("a-plane", {
-    class: "card-accent", width: 1.18, height: 0.03, position: "0 0.39 0.05",
-    material: `color: ${acento}; opacity: 0.9; transparent: true; shader: flat`,
-  });
-  const titulo = el("a-text", {
-    value: ctx.nome, position: "0 0.17 0.07", width: 1.75, align: "center",
-    color: "#ffffff", font: "kelsonsans", "wrap-count": 14,
-  });
-  const tipo = el("a-text", {
-    value: isBrasil ? "Visao nacional" : "Regiao", position: "0 -0.05 0.07",
-    width: 1.5, align: "center", color: "#cfe0f4", font: "kelsonsans",
-  });
-  const valor = el("a-text", {
-    value: eficiencia == null ? "s/ dados" : `Eficiencia ${fmt(eficiencia)}%`,
-    position: "0 -0.31 0.07", width: 1.55, align: "center", color: "#9be7ff", font: "kelsonsans",
-  });
-  const hit = el("a-box", {
-    class: `hit clickable ${hitClass}`, width: 1.44, height: 1.06, depth: 0.18,
-    material: "color: #ffffff; opacity: 0.001; transparent: true",
-  });
-  card.append(glassBack, face, glow, titulo, tipo, valor, hit);
-
-  hit.addEventListener("mouseenter", () => setCardHover(card, cor, acento, true));
-  hit.addEventListener("mouseleave", () => setCardHover(card, cor, acento, false));
-  return card;
-}
 
 function createDrillCard(item, pos, isRegion) {
   const nome = item._rotulo || item.sigla || item.nome;
@@ -876,31 +838,37 @@ function bindDrillBack() {
 async function enterIndicators(ctx) {
   if (state.transitioning) return;
   state.transitioning = true;
-  cancelGuided();
-  await fadeToBlack();
+  // try/finally: se qualquer passo lancar, a flag precisa voltar a false, senao
+  // TODA a interacao fica bloqueada (os handlers checam state.transitioning) e a
+  // cena parece "morta" sem nenhum erro visivel na tela.
+  try {
+    cancelGuided();
+    await fadeToBlack();
 
-  state.context = ctx;
-  state.stage = "indicators";
-  state.indicatorKey = null;
-  state.compareOn = false;
-  state.compareContext = resolveCompareContext(ctx);
+    state.context = ctx;
+    state.stage = "indicators";
+    state.indicatorKey = null;
+    state.compareOn = false;
+    state.compareContext = resolveCompareContext(ctx);
 
-  setVectorAttribute(dom.cameraRig, "position", "0 1.6 0");
-  setEntityVisible(dom.selectionWorld, false);
-  setEntityVisible(dom.explorationWorld, true);
-  setEntityVisible(dom.timelineView, false);
-  setEntityVisible(dom.composicaoView, false);
-  setEntityVisible(dom.multiplosView, false);
-  setEntityVisible(dom.tourPanel, false);
-  setEntityVisible(dom.indicatorView, true);
-  hideInfoPanelNow();
-  dom.hudLegend.hidden = true;
-  dom.compLegend.hidden = true;
+    resetCameraRig();
+    setEntityVisible(dom.selectionWorld, false);
+    setEntityVisible(dom.explorationWorld, true);
+    setEntityVisible(dom.timelineView, false);
+    setEntityVisible(dom.composicaoView, false);
+    setEntityVisible(dom.multiplosView, false);
+    setEntityVisible(dom.tourPanel, false);
+    setEntityVisible(dom.indicatorView, true);
+    hideInfoPanelNow();
+    dom.hudLegend.hidden = true;
+    dom.compLegend.hidden = true;
 
-  populateIndicators(ctx);
-  setInteractionMode("indicators");
-  await fadeFromBlack();
-  state.transitioning = false;
+    populateIndicators(ctx);
+    setInteractionMode("indicators");
+    await fadeFromBlack();
+  } finally {
+    state.transitioning = false;
+  }
 }
 
 function populateIndicators(ctx) {
@@ -1024,20 +992,25 @@ function setPointHover(point, indicador, isHovering) {
   if (isHovering) showInfoPanel(indicador);
   else hideInfoPanel();
 
-  // A4: mostrar/esconder conectores visuais ao focar Eficiencia.
-  // Durante o tour (cena com showLinks) nao escondemos ao passar por outros medidores.
-  if (indicador.key === "eficiencia") {
-    showIndicatorLinks(isHovering);
-  } else if (!state.tourActive) {
-    showIndicatorLinks(false);
-  }
+  // A4: o painel-equacao (relacao causal) NAO abre no hover — ele so aparece nas
+  // cenas de tour com `showLinks`. No hover fica apenas o painel interpretativo,
+  // igual aos outros medidores (comportamento consistente e sem poluicao visual).
+}
+
+// A linha de instrucao (contextLead) fica na mesma faixa de tela do painel
+// interpretativo: escondemos uma enquanto a outra aparece.
+function setLeadVisible(visivel) {
+  if (!dom.contextLead) return;
+  if (visivel && (state.stage !== "indicators" || state.tourActive)) return;
+  setEntityVisible(dom.contextLead, visivel);
 }
 
 function showInfoPanel(indicador) {
   const latest = latestValue(state.context.series[indicador.key]);
+  setLeadVisible(false);
   setEntityVisible(dom.infoPanel, true);
-  setVectorAttribute(dom.infoPanel, "scale", "0.82 0.82 0.82");
-  dom.infoPanel.setAttribute("animation__open", "property: scale; to: 0.9 0.9 0.9; dur: 260; easing: easeOutBack");
+  setVectorAttribute(dom.infoPanel, "scale", "0.78 0.78 0.78");
+  dom.infoPanel.setAttribute("animation__open", "property: scale; to: 0.85 0.85 0.85; dur: 260; easing: easeOutBack");
   dom.infoAccent.setAttribute("material", `color: ${indicador.cor}; shader: flat`);
   dom.infoTitle.setAttribute("value", indicador.label);
   dom.infoValue.setAttribute("value", latest == null ? "Sem dados em 2024" : `${fmt(latest)}% em 2024`);
@@ -1087,6 +1060,7 @@ function fadeInfoPanel(show) {
 
 function hideInfoPanel() {
   if (dom.infoPanel.object3D && dom.infoPanel.object3D.visible) fadeEntity(dom.infoPanel, false);
+  setLeadVisible(true);
 }
 
 // Esconde na hora (mudanca de etapa), cancelando qualquer fade em andamento.
@@ -1097,139 +1071,151 @@ function hideInfoPanelNow() {
 
 function onIndicatorClick(indicador) {
   if (state.transitioning) return;
+  pushHistory(); // vindo dos indicadores -> "Voltar" retorna aos gauges.
   enterTimeline(indicador.key);
 }
 
 // ----------------------------------------------------------------------------
-// A4: Conectores visuais Conclusao/Retencao/Evasao -> Eficiencia.
+// A4: Relacao causal Conclusao/Evasao/Retencao -> Eficiencia.
+//
+// Antes eram linhas 3D ligando os medidores; o traçado Evasao -> Eficiencia
+// passava exatamente por cima do medidor de Conclusao (o ponto medio coincide
+// com a posicao dele) e o painel "como se calcula" cobria o cabecalho da cena.
+// Agora a relacao vira um PAINEL-EQUACAO compacto acima dos medidores:
+// tres chips de fator (com o efeito: eleva / reduz / deprime) + resultado.
+// Usado apenas nas cenas de tour com `showLinks` (nao aparece no hover).
 // ----------------------------------------------------------------------------
 
-// Constroi as linhas e o painel "como se calcula" dentro de #indicatorLinks.
+// Geometria do painel-equacao (mundo). Fica entre o topo dos medidores (~2,23)
+// e o topo do campo de visao, sem competir com o cabecalho de contexto (que e
+// ocultado nessas cenas).
+const CAUSAL = {
+  y: 3.02, z: -3.5, w: 6.2, h: 1.1,
+  chipW: 1.22, chipH: 0.52, chipGap: 0.07,
+  resW: 1.55, margem: 0.14,
+};
+
+// Efeito de cada fator sobre a eficiencia (texto + cor do rotulo).
+const CAUSAL_EFEITO = {
+  conclusao: { verbo: "ELEVA", cor: "#65e4b8" },
+  evasao: { verbo: "REDUZ", cor: "#ff8e8e" },
+  retencao: { verbo: "DEPRIME", cor: "#ffe088" },
+};
+
+// Constroi o painel dentro de #indicatorLinks (mantido oculto ate o tour pedir).
 // Chamado em populateIndicators, depois de criar os medidores.
 function buildIndicatorLinks() {
   if (!dom.indicatorLinks) return;
   dom.indicatorLinks.innerHTML = "";
+  dom.efficacyPanel = null;
 
-  // Indices dos indicadores (ordem do dados.json):
-  // 0: evasao, 1: conclusao, 2: eficiencia, 3: retencao.
-  const efIdx = DADOS.indicadores.findIndex((i) => i.key === "eficiencia");
-  if (efIdx < 0) return;
-  const efPos = dataPositions[efIdx];
-  const efWorld = { x: efPos.x, y: GAUGE.y, z: efPos.z };
+  const ctx = state.context;
+  if (!ctx) return;
 
-  const sources = DADOS.indicadores
-    .map((ind, i) => ({ ind, pos: dataPositions[i], i }))
-    .filter((d) => d.ind.key !== "eficiencia");
-
-  sources.forEach(({ ind, pos }) => {
-    const from = { x: pos.x, y: GAUGE.y, z: pos.z };
-    const to = efWorld;
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const dz = to.z - from.z;
-    const len = Math.hypot(dx, dz); // comprimento horizontal (plano XZ)
-    const ang = (Math.atan2(dx, -dz) * 180) / Math.PI; // rotacao em Y
-    const midX = (from.x + to.x) / 2;
-    const midZ = (from.z + to.z) / 2;
-
-    // Linha horizontal (flat) no chao do palco ligando os medidores.
-    const line = el("a-box", {
-      width: len * 0.85, height: 0.028, depth: 0.028,
-      position: `${round2(midX)} ${round2(GAUGE.y)} ${round2(midZ)}`,
-      rotation: `0 ${round2(ang)} 0`,
-      material: `color: ${ind.cor}; emissive: ${ind.cor}; emissiveIntensity: 0.5; shader: flat; opacity: 0.7; transparent: true`,
-    });
-    dom.indicatorLinks.appendChild(line);
-    applyPendingTransforms(line);
-
-    // Seta (triangulo) na ponta proxima a Eficiencia.
-    const arrowDist = 0.45; // distancia do centro do gauge de Eficiencia
-    const arrowX = to.x - (dx / len) * arrowDist;
-    const arrowZ = to.z - (dz / len) * arrowDist;
-    // Cone aponta em +Y por padrao; deitamos com -90 em Z e direcionamos com `ang` em Y.
-    const arrow = el("a-cone", {
-      height: 0.14, radiusBottom: 0.06, radiusTop: 0,
-      position: `${round2(arrowX)} ${round2(GAUGE.y)} ${round2(arrowZ)}`,
-      rotation: `0 ${round2(ang)} -90`,
-      material: `color: ${ind.cor}; emissive: ${ind.cor}; emissiveIntensity: 0.4; shader: flat`,
-    });
-    dom.indicatorLinks.appendChild(arrow);
-    applyPendingTransforms(arrow);
-
-    // Rotulo na linha.
-    const labelText = ind.key === "evasao" ? "reduz" : ind.key === "conclusao" ? "eleva" : "deprime";
-    const labelColor = ind.key === "conclusao" ? "#65e4b8" : ind.key === "evasao" ? "#ff8e8e" : "#ffe088";
-    const lbl = el("a-text", {
-      value: labelText.toUpperCase(),
-      position: `${round2(midX)} ${round2(GAUGE.y + 0.12)} ${round2(midZ + 0.05)}`,
-      width: 1.6, align: "center", color: labelColor, font: "kelsonsans",
-    });
-    dom.indicatorLinks.appendChild(lbl);
-    applyPendingTransforms(lbl);
+  const panel = el("a-entity", {
+    id: "efficacyPanel",
+    position: `0 ${CAUSAL.y} ${CAUSAL.z}`,
   });
 
-  // Painel "Como se calcula" acima da Eficiencia.
-  const panelY = GAUGE.y + GAUGE.rOut + 0.6;
-  buildEfficacyPanel(efWorld.x, panelY, efWorld.z);
+  const bg = el("a-plane", {
+    width: CAUSAL.w, height: CAUSAL.h,
+    material: "color: #0b1322; opacity: 0.94; transparent: true; shader: flat",
+  });
+  const accent = el("a-plane", {
+    width: CAUSAL.w, height: 0.045, position: `0 ${round2(CAUSAL.h / 2 - 0.022)} 0.01`,
+    material: "color: #4cc9f0; shader: flat",
+  });
+  const kicker = el("a-text", {
+    value: "COMO A EFICIENCIA SE FORMA", position: `0 ${round2(CAUSAL.h / 2 - 0.15)} 0.02`,
+    width: 3.4, align: "center", color: "#9be7ff", font: "kelsonsans",
+  });
+  panel.append(bg, accent, kicker);
+
+  // Chips dos tres fatores + chip do resultado, numa unica linha.
+  const fatores = ["conclusao", "evasao", "retencao"];
+  const passo = CAUSAL.chipW + CAUSAL.chipGap;
+  const x0 = -CAUSAL.w / 2 + CAUSAL.margem + CAUSAL.chipW / 2; // primeiro chip
+  const chipY = -0.02;
+
+  fatores.forEach((key, i) => {
+    const ind = indicadorByKey(key);
+    if (!ind) return;
+    const efeito = CAUSAL_EFEITO[key];
+    const valor = latestValue(ctx.series[key]);
+    const cx = x0 + i * passo;
+
+    const chipBg = el("a-plane", {
+      width: CAUSAL.chipW, height: CAUSAL.chipH, position: `${round2(cx)} ${chipY} 0.02`,
+      material: "color: #101c30; opacity: 0.95; transparent: true; shader: flat",
+    });
+    const chipTop = el("a-plane", {
+      width: CAUSAL.chipW, height: 0.03,
+      position: `${round2(cx)} ${round2(chipY + CAUSAL.chipH / 2 - 0.015)} 0.03`,
+      material: `color: ${ind.cor}; shader: flat`,
+    });
+    const chipNome = el("a-text", {
+      value: ind.label.replace(/^Taxa de\s+/i, ""),
+      position: `${round2(cx)} ${round2(chipY + 0.16)} 0.03`,
+      width: 1.9, align: "center", color: "#dfe9ff", font: "kelsonsans",
+    });
+    const chipValor = el("a-text", {
+      value: valor == null ? "s/d" : `${fmt(valor)}%`,
+      position: `${round2(cx)} ${round2(chipY - 0.01)} 0.03`,
+      width: 2.4, align: "center", color: ind.cor, font: "kelsonsans",
+    });
+    const chipEfeito = el("a-text", {
+      value: efeito.verbo, position: `${round2(cx)} ${round2(chipY - 0.19)} 0.03`,
+      width: 1.7, align: "center", color: efeito.cor, font: "kelsonsans",
+    });
+    panel.append(chipBg, chipTop, chipNome, chipValor, chipEfeito);
+  });
+
+  // Seta e chip de resultado (Eficiencia), encaixados na folga entre o ultimo
+  // chip de fator e a margem direita do painel.
+  const efInd = indicadorByKey("eficiencia");
+  const efValor = latestValue(ctx.series.eficiencia);
+  const fimFatores = x0 + 2 * passo + CAUSAL.chipW / 2;
+  const resX = CAUSAL.w / 2 - CAUSAL.margem - CAUSAL.resW / 2;
+  const setaX = (fimFatores + (resX - CAUSAL.resW / 2)) / 2;
+  const seta = el("a-text", {
+    value: ">", position: `${round2(setaX)} ${chipY} 0.03`,
+    width: 2.6, align: "center", color: "#7d93b4", font: "kelsonsans",
+  });
+  const resBg = el("a-plane", {
+    width: CAUSAL.resW, height: CAUSAL.chipH, position: `${round2(resX)} ${chipY} 0.02`,
+    material: `color: ${efInd.cor}; opacity: 0.16; transparent: true; shader: flat`,
+  });
+  const resTop = el("a-plane", {
+    width: CAUSAL.resW, height: 0.03,
+    position: `${round2(resX)} ${round2(chipY + CAUSAL.chipH / 2 - 0.015)} 0.03`,
+    material: `color: ${efInd.cor}; shader: flat`,
+  });
+  const resNome = el("a-text", {
+    value: "Eficiencia", position: `${round2(resX)} ${round2(chipY + 0.16)} 0.03`,
+    width: 1.9, align: "center", color: "#dfe9ff", font: "kelsonsans",
+  });
+  const resValor = el("a-text", {
+    value: efValor == null ? "s/d" : `${fmt(efValor)}%`,
+    position: `${round2(resX)} ${round2(chipY - 0.06)} 0.03`,
+    width: 3.0, align: "center", color: efInd.cor, font: "kelsonsans",
+  });
+  panel.append(seta, resBg, resTop, resNome, resValor);
+
+  const nota = el("a-text", {
+    value: "A eficiencia pondera os retidos - nao e a soma simples dos tres.",
+    position: `0 ${round2(-CAUSAL.h / 2 + 0.1)} 0.02`,
+    width: 5.2, align: "center", color: "#8da0bb", font: "kelsonsans", "wrap-count": 66,
+  });
+  panel.append(nota);
+
+  dom.indicatorLinks.appendChild(panel);
+  applyPendingTransforms(panel); // ja percorre os filhos (data-vr-*)
+  dom.efficacyPanel = panel;
 
   setEntityVisible(dom.indicatorLinks, false);
 }
 
-// Painel flutuante sobre Eficiencia explicando a formula.
-function buildEfficacyPanel(cx, cy, cz) {
-  // Valores do contexto atual para a micro-explicacao.
-  const ctx = state.context;
-  if (!ctx) return;
-  const ev = latestValue(ctx.series.evasao);
-  const co = latestValue(ctx.series.conclusao);
-  const re = latestValue(ctx.series.retencao);
-  const ef = latestValue(ctx.series.eficiencia);
-
-  const panel = el("a-entity", {
-    id: "efficacyPanel", position: `${round2(cx)} ${round2(cy)} ${round2(cz + 0.1)}`,
-  });
-
-  const bg = el("a-plane", {
-    width: 3.2, height: 1.35,
-    material: "color: #0b1322; opacity: 0.94; transparent: true; shader: flat",
-  });
-  const accent = el("a-plane", {
-    width: 3.2, height: 0.05, position: "0 0.65 0.01",
-    material: "color: #4cc9f0; shader: flat",
-  });
-  const titulo = el("a-text", {
-    value: "COMO SE CALCULA A EFICIENCIA",
-    position: "0 0.44 0.02", width: 3.0, align: "center", color: "#9be7ff", font: "kelsonsans",
-  });
-  const formula = el("a-text", {
-    value: "Eficiencia = Concluintes + (Retidos x prob. de conclusao)",
-    position: "0 0.2 0.02", width: 3.0, align: "center", color: "#ffffff", font: "kelsonsans",
-  });
-
-  // Sem operadores aritmeticos: a eficiencia NAO e a soma simples dos tres (a formula
-  // pondera os retidos). Listamos os valores e mostramos o resultado com "->".
-  let resumo = "";
-  if (ev != null && co != null && re != null && ef != null) {
-    resumo = `Em 2024: conclusao ${fmt(co)}% · evasao ${fmt(ev)}% · retencao ${fmt(re)}%  ->  eficiencia ${fmt(ef)}%`;
-  }
-  const valores = el("a-text", {
-    value: resumo, position: "0 -0.05 0.02", width: 2.8, align: "center",
-    color: "#cfe0f4", font: "kelsonsans", "wrap-count": 52,
-  });
-
-  const nota = el("a-text", {
-    value: "Mais conclusao e menos evasao elevam a eficiencia.\nMais retencao a deprime, pois indica atraso na formacao.",
-    position: "0 -0.35 0.02", width: 2.8, align: "center",
-    color: "#8da0bb", font: "kelsonsans", "wrap-count": 52,
-  });
-
-  panel.append(bg, accent, titulo, formula, valores, nota);
-  dom.indicatorLinks.appendChild(panel);
-  applyPendingTransforms(panel);
-  dom.efficacyPanel = panel;
-}
-
-// Mostrar/esconder os conectores visuais.
+// Mostrar/esconder o painel-equacao da relacao causal (so cenas de tour).
 function showIndicatorLinks(show) {
   if (!dom.indicatorLinks) return;
   if (show) {
@@ -1244,7 +1230,10 @@ function showIndicatorLinks(show) {
 // Etapa C - Composicao "Para onde vao os alunos" (barras empilhadas + anel).
 // ----------------------------------------------------------------------------
 
-const COMP = { x0: -3.0, x1: 1.6, baseY: 1.2, maxH: 1.5, z: -3.3, donutX: 2.5, donutY: 1.95, rIn: 0.34, rOut: 0.55 };
+// Geometria da composicao. As barras sao 100% empilhadas (sempre cheias), entao a
+// altura maxima define o topo real da cena: mantida abaixo do bloco de narrativa
+// para o texto nao encostar nas torres. O anel do ano fica a direita das barras.
+const COMP = { x0: -3.1, x1: 1.2, baseY: 1.05, maxH: 1.32, z: -3.3, donutX: 2.6, donutY: 1.71, rIn: 0.34, rOut: 0.55 };
 const COMP_COLORS = { concluidos: "#3ad29f", retidos: "#ffd166", evadidos: "#ff6b6b" };
 const COMP_NOUN = { concluidos: "concluintes", retidos: "retidos", evadidos: "evadidos" };
 const compXFor = (i) => COMP.x0 + i * ((COMP.x1 - COMP.x0) / (DADOS.anos.length - 1));
@@ -1253,7 +1242,7 @@ let compFocusEl = null;
 function bindCompControls() {
   // Botao de entrada (na tela de indicadores).
   const enterHit = dom.compEnter.querySelector(".indicator-clickable");
-  enterHit.addEventListener("click", () => { if (!state.transitioning) enterComposicao(); });
+  enterHit.addEventListener("click", () => { if (!state.transitioning) { pushHistory(); enterComposicao(); } });
   enterHit.addEventListener("mouseenter", () => dom.compEnter.setAttribute("animation__h", "property: scale; to: 1.05 1.05 1.05; dur: 150"));
   enterHit.addEventListener("mouseleave", () => dom.compEnter.setAttribute("animation__h", "property: scale; to: 1 1 1; dur: 150"));
 
@@ -1294,7 +1283,9 @@ function enterComposicao() {
   setEntityVisible(dom.contextTitle, false);
   setEntityVisible(dom.contextLead, false);
 
-  dom.compTitle.setAttribute("value", `Para onde vao os alunos - ${rotuloContexto(state.context)}`);
+  // rotuloCurto (sigla nas instituicoes) mantem o titulo em 1 linha: nomes
+  // completos de institutos passam de 60 caracteres e quebravam em 3 linhas.
+  dom.compTitle.setAttribute("value", `Para onde vao os alunos - ${rotuloCurto(state.context)}`);
   dom.compText.setAttribute("value", compNarrative(state.context));
   dom.compLegend.hidden = false;
   crumb("Mapa", rotuloContexto(state.context), "Indicadores", "Para onde vao os alunos");
@@ -1334,9 +1325,11 @@ function buildComposicao() {
       position: `${cx} ${y} ${COMP.z - 0.04}`,
       material: `color: ${pct === 0 ? "#3f6796" : "#24405f"}; opacity: ${pct === 0 ? 0.8 : 0.45}; transparent: true; shader: flat`,
     });
+    // anchor:right ancora o fim do texto no x informado; sem isso o rotulo
+    // (bloco centrado) avanca para dentro da area das barras.
     const rotulo = el("a-text", {
-      value: `${pct}%`, position: `${COMP.x0 - 0.45} ${y} ${COMP.z - 0.03}`,
-      width: 1.5, align: "right", color: "#7d93b4", font: "kelsonsans",
+      value: `${pct}%`, position: `${round2(COMP.x0 - 0.32)} ${round2(y)} ${COMP.z - 0.03}`,
+      width: 1.5, align: "right", anchor: "right", color: "#7d93b4", font: "kelsonsans",
     });
     dom.compScene.append(linha, rotulo);
     applyPendingTransforms(linha);
@@ -1399,8 +1392,8 @@ function buildComposicao() {
       applyPendingTransforms(hit);
     }
     const tick = el("a-text", {
-      value: String(ano), position: `${x} ${COMP.baseY - 0.22} ${COMP.z}`,
-      width: 1.6, align: "center", color: "#90a6c6", font: "kelsonsans",
+      value: String(ano), position: `${x} ${round2(COMP.baseY - 0.26)} ${COMP.z}`,
+      width: 1.5, align: "center", color: "#90a6c6", font: "kelsonsans",
     });
     dom.compScene.appendChild(tick);
     applyPendingTransforms(tick);
@@ -1454,17 +1447,24 @@ function updateCompYear() {
       applyPendingTransforms(arc);
       acc += a;
     });
+    // Textos do miolo do anel: largura limitada ao diametro interno (2 x rIn)
+    // para nao invadirem o arco colorido.
     const centerYear = el("a-text", {
-      value: String(ano), position: `${COMP.donutX} ${COMP.donutY + 0.07} ${COMP.z + 0.01}`,
-      width: 1.9, align: "center", color: "#ffffff", font: "kelsonsans",
+      value: String(ano), position: `${COMP.donutX} ${round2(COMP.donutY + 0.06)} ${COMP.z + 0.01}`,
+      width: 1.7, align: "center", color: "#ffffff", font: "kelsonsans",
     });
     const centerM = el("a-text", {
-      value: `${fmtInt(m)} matriculas`, position: `${COMP.donutX} ${COMP.donutY - 0.13} ${COMP.z + 0.01}`,
-      width: 1.7, align: "center", color: "#9fb2cc", font: "kelsonsans",
+      value: `${fmtInt(m)} matriculas`, position: `${COMP.donutX} ${round2(COMP.donutY - 0.11)} ${COMP.z + 0.01}`,
+      width: 1.35, align: "center", color: "#9fb2cc", font: "kelsonsans",
     });
-    compFocusEl.append(centerYear, centerM);
+    const donutCaption = el("a-text", {
+      value: "ano em foco", position: `${COMP.donutX} ${round2(COMP.donutY - COMP.rOut - 0.18)} ${COMP.z + 0.01}`,
+      width: 1.5, align: "center", color: "#7d93b4", font: "kelsonsans",
+    });
+    compFocusEl.append(centerYear, centerM, donutCaption);
     applyPendingTransforms(centerYear);
     applyPendingTransforms(centerM);
+    applyPendingTransforms(donutCaption);
     dom.compReadout.setAttribute(
       "value",
       `${ano}: ${fmtInt(c.concluidos[idx])} ${COMP_NOUN.concluidos} · ${fmtInt(c.retidos[idx])} ${COMP_NOUN.retidos} · ${fmtInt(c.evadidos[idx])} ${COMP_NOUN.evadidos}`
@@ -1486,12 +1486,12 @@ function updateCompEfficacyConnective() {
   const m = ctx.series.matriculas[idx];
   const c = ctx.series.contagens;
   if (m > 0 && ef != null && c) {
-    const pc = (c.concluidos[idx] / m) * 100;
-    const pr = (c.retidos[idx] / m) * 100;
     const pe = (c.evadidos[idx] / m) * 100;
     const current = dom.compReadout.getAttribute("text")?.value || dom.compReadout.getAttribute("value") || "";
     const base = current.split("\n")[0];
-    const connective = `\nFio Causal: a conclusao (${fmt(pc)}%) sofre o peso da evasao (${fmt(pe)}%), puxando a Eficiencia para ${fmt(ef)}%.`;
+    // Frase curta (1 linha): o readout fica com 2 linhas no maximo e nao encosta
+    // nos rotulos de ano acima nem nos controles abaixo.
+    const connective = `\nFio causal: ${fmt(pe)}% de evasao puxam a eficiencia para ${fmt(ef)}%.`;
     dom.compReadout.setAttribute("value", base + connective);
   }
 }
@@ -1530,6 +1530,7 @@ function enterTimeline(key, skipGuided) {
   buildChartGrid();
   buildTimeline();
   applyCompare();
+  updateCompareButton();
   updateNarrativePanel();
   updateAmbientDrone();
   if (skipGuided) {
@@ -1558,8 +1559,8 @@ function buildChartGrid() {
       material: `color: ${pct === 0 ? "#3f6796" : "#24405f"}; opacity: ${pct === 0 ? 0.8 : 0.5}; transparent: true; shader: flat`,
     });
     const rotulo = el("a-text", {
-      value: `${pct}%`, position: `${CHART.x0 - 0.45} ${y} ${CHART.z - 0.03}`,
-      width: 1.6, align: "right", color: "#7d93b4", font: "kelsonsans",
+      value: `${pct}%`, position: `${round2(CHART.x0 - 0.32)} ${round2(y)} ${CHART.z - 0.03}`,
+      width: 1.6, align: "right", anchor: "right", color: "#7d93b4", font: "kelsonsans",
     });
     dom.chartGrid.append(linha, rotulo);
     applyPendingTransforms(linha);
@@ -2028,14 +2029,35 @@ function revealCallout(i) {
 
 // ---- Acoes (exploracao livre) ----
 
+// O Brasil nao tem contexto de comparacao (ele proprio e a referencia): o botao
+// fica apagado para nao prometer uma acao que nao acontece.
+function updateCompareButton() {
+  if (!dom.ctrlCompare) return;
+  const disponivel = !!state.compareContext;
+  const alvo = dom.ctrlCompare.querySelector("a-box");
+  if (alvo) {
+    alvo.setAttribute(
+      "material",
+      disponivel
+        ? "color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.2"
+        : "color: #101827; roughness: 0.6; emissive: #1b2a3d; emissiveIntensity: 0.05; opacity: 0.55; transparent: true"
+    );
+  }
+  dom.ctrlCompareLabel.setAttribute("color", disponivel ? "#cfe9ff" : "#5d6f88");
+  dom.ctrlCompareLabel.setAttribute(
+    "value",
+    disponivel ? (state.compareOn ? "Ocultar" : "Comparar") : "Comparar (n/d)"
+  );
+}
+
 function toggleCompare() {
   if (state.guided) return;
   if (!state.compareContext) {
-    dom.hudSubtitle.textContent = "Brasil nao tem contexto de comparacao padrao.";
+    dom.hudSubtitle.textContent = "O Brasil e a propria referencia: escolha uma regiao para comparar.";
     return;
   }
   state.compareOn = !state.compareOn;
-  dom.ctrlCompareLabel.setAttribute("value", state.compareOn ? "Ocultar" : "Comparar");
+  updateCompareButton();
   applyCompare();
   updateYear();
   dom.hudLegend.hidden = !state.compareOn;
@@ -2233,32 +2255,35 @@ async function startTour(tourId) {
   const tour = TOURS[tourId];
   if (!tour) return;
   state.transitioning = true;
-  cancelGuided();
-  stopNarration();
-  await fadeToBlack();
+  try {
+    cancelGuided();
+    stopNarration();
+    await fadeToBlack();
 
-  state.tourActive = true;
-  state.tourId = tourId;
-  state.tourScenes = tour.cenas;
-  state.tourStep = 0;
-  state.compareOn = false;
+    state.tourActive = true;
+    state.tourId = tourId;
+    state.tourScenes = tour.cenas;
+    state.tourStep = 0;
+    state.compareOn = false;
 
-  setVectorAttribute(dom.cameraRig, "position", "0 1.6 0");
-  setEntityVisible(dom.selectionWorld, false);
-  setEntityVisible(dom.explorationWorld, true);
-  dom.hudLegend.hidden = true;
-  dom.compLegend.hidden = true;
+    resetCameraRig();
+    setEntityVisible(dom.selectionWorld, false);
+    setEntityVisible(dom.explorationWorld, true);
+    dom.hudLegend.hidden = true;
+    dom.compLegend.hidden = true;
 
-  // Atualizar a cor da barra HUD com a cor da historia.
-  if (dom.tourBarLabel) dom.tourBarLabel.textContent = tour.titulo;
-  const barEl = document.getElementById("tourBar");
-  if (barEl) barEl.style.borderLeftColor = tour.cor;
-  const fillEl = document.getElementById("tourBarFill");
-  if (fillEl) fillEl.style.background = `linear-gradient(90deg, ${tour.cor}, ${shadeColor(tour.cor, 30)})`;
+    // Atualizar a cor da barra HUD com a cor da historia.
+    if (dom.tourBarLabel) dom.tourBarLabel.textContent = tour.titulo;
+    const barEl = document.getElementById("tourBar");
+    if (barEl) barEl.style.borderLeftColor = tour.cor;
+    const fillEl = document.getElementById("tourBarFill");
+    if (fillEl) fillEl.style.background = `linear-gradient(90deg, ${tour.cor}, ${shadeColor(tour.cor, 30)})`;
 
-  await tourGoTo(0, /* skipFade */ true);
-  await fadeFromBlack();
-  state.transitioning = false;
+    await tourGoTo(0, /* skipFade */ true);
+    await fadeFromBlack();
+  } finally {
+    state.transitioning = false;
+  }
 }
 
 async function tourGoTo(n, skipFade) {
@@ -2268,94 +2293,106 @@ async function tourGoTo(n, skipFade) {
   state.tourStep = n;
 
   // Fade entre cenas (exceto a primeira que ja vem do fade do startTour).
+  // Quem assume a transicao tambem e quem libera no finally la embaixo.
+  let assumiuTransicao = false;
   if (!skipFade && !state.transitioning) {
     state.transitioning = true;
+    assumiuTransicao = true;
     await fadeToBlack();
   }
 
-  cancelGuided();
-  stopNarration();
+  try {
+    cancelGuided();
+    stopNarration();
 
-  const ehPainel = cena.tipo === "abertura" || cena.tipo === "fechamento";
+    const ehPainel = cena.tipo === "abertura" || cena.tipo === "fechamento";
 
-  // Esconder tudo antes de montar a cena.
-  setEntityVisible(dom.indicatorView, false);
-  setEntityVisible(dom.timelineView, false);
-  setEntityVisible(dom.composicaoView, false);
-  setEntityVisible(dom.multiplosView, false);
-  setEntityVisible(dom.tourPanel, false);
-  hideInfoPanelNow();
+    // Esconder tudo antes de montar a cena.
+    setEntityVisible(dom.indicatorView, false);
+    setEntityVisible(dom.timelineView, false);
+    setEntityVisible(dom.composicaoView, false);
+    setEntityVisible(dom.multiplosView, false);
+    setEntityVisible(dom.tourPanel, false);
+    hideInfoPanelNow();
 
-  if (ehPainel) {
-    // Cena de texto (abertura/fechamento).
-    state.stage = "painel";
-    let corpoFinal = cena.corpo || "";
-    if (cena.tipo === "fechamento" && (cena.contextoId || state.context)) {
-      const ctx = cena.contextoId ? resolveTourContext(cena.contextoId) : state.context;
-      if (corpoFinal.includes("{sintese}")) corpoFinal = corpoFinal.replace("{sintese}", buildSintese(ctx));
-      buildVisceralParticles(ctx);
+    if (ehPainel) {
+      // Cena de texto (abertura/fechamento).
+      state.stage = "painel";
+      let corpoFinal = cena.corpo || "";
+      if (cena.tipo === "fechamento" && (cena.contextoId || state.context)) {
+        const ctx = cena.contextoId ? resolveTourContext(cena.contextoId) : state.context;
+        if (corpoFinal.includes("{sintese}")) corpoFinal = corpoFinal.replace("{sintese}", buildSintese(ctx));
+        buildVisceralParticles(ctx);
+      } else {
+        stopVisceral();
+      }
+      showTourPanel({ ...cena, corpo: corpoFinal });
     } else {
       stopVisceral();
-    }
-    showTourPanel({ ...cena, corpo: corpoFinal });
-  } else {
-    stopVisceral();
-    const ctx = resolveTourContext(cena.contextoId);
-    if (!ctx) { state.transitioning = false; return; }
-    state.context = ctx;
-    state.compareOn = false;
-    state.compareContext = resolveCompareContext(ctx);
+      const ctx = resolveTourContext(cena.contextoId);
+      if (!ctx) return; // o finally devolve state.transitioning
+      state.context = ctx;
+      state.compareOn = false;
+      state.compareContext = resolveCompareContext(ctx);
 
-    if (cena.modo === "timeline" && cena.indicador) {
-      enterTimeline(cena.indicador, /* skipGuided */ true);
-      dom.narrativeTitle.setAttribute("value", cena.manchete);
-      const narr = computeNarrative(ctx, cena.indicador);
-      dom.narrativeText.setAttribute("value", narr.texto);
-    } else if (cena.modo === "composicao") {
-      enterComposicao();
-      dom.compTitle.setAttribute("value", cena.manchete);
-    } else if (cena.modo === "multiplos") {
-      enterMultiplos(cena.indicador, /* skipFade */ true);
-      dom.multiplosTitle.setAttribute("value", cena.manchete);
-    } else if (cena.modo === "indicadores") {
-      // A4: cena de indicadores no tour (relacao causal).
-      state.stage = "indicators";
-      setEntityVisible(dom.indicatorView, true);
-      setEntityVisible(dom.contextKicker, true);
-      setEntityVisible(dom.contextTitle, true);
-      setEntityVisible(dom.contextLead, true);
-      populateIndicators(ctx);
-      dom.contextKicker.setAttribute("value", "RELACAO ENTRE INDICADORES");
-      dom.contextTitle.setAttribute("value", cena.manchete);
-      dom.contextLead.setAttribute("value", "Evasao, conclusao e retencao determinam a eficiencia academica.");
-      // Mostrar conectores visuais automaticamente.
-      if (cena.showLinks) showIndicatorLinks(true);
+      if (cena.modo === "timeline" && cena.indicador) {
+        enterTimeline(cena.indicador, /* skipGuided */ true);
+        dom.narrativeTitle.setAttribute("value", cena.manchete);
+        const narr = computeNarrative(ctx, cena.indicador);
+        dom.narrativeText.setAttribute("value", narr.texto);
+      } else if (cena.modo === "composicao") {
+        enterComposicao();
+        dom.compTitle.setAttribute("value", cena.manchete);
+      } else if (cena.modo === "multiplos") {
+        enterMultiplos(cena.indicador, /* skipFade */ true);
+        dom.multiplosTitle.setAttribute("value", cena.manchete);
+      } else if (cena.modo === "indicadores") {
+        // A4: cena de indicadores no tour (relacao causal).
+        state.stage = "indicators";
+        setEntityVisible(dom.indicatorView, true);
+        populateIndicators(ctx);
+        if (cena.showLinks) {
+          // O painel-equacao ocupa a faixa do cabecalho: escondemos kicker/titulo/lead
+          // para nao empilhar dois blocos de texto na mesma altura da tela.
+          setEntityVisible(dom.contextKicker, false);
+          setEntityVisible(dom.contextTitle, false);
+          setEntityVisible(dom.contextLead, false);
+          showIndicatorLinks(true);
+        } else {
+          setEntityVisible(dom.contextKicker, true);
+          setEntityVisible(dom.contextTitle, true);
+          setEntityVisible(dom.contextLead, true);
+          dom.contextKicker.setAttribute("value", "RELACAO ENTRE INDICADORES");
+          dom.contextTitle.setAttribute("value", cena.manchete);
+          dom.contextLead.setAttribute("value", "Evasao, conclusao e retencao determinam a eficiencia academica.");
+          showIndicatorLinks(false);
+        }
+      }
     }
-  }
 
-  // Texto conectivo no campo de hint.
-  dom.guidedHint.setAttribute("value", cena.conectivo || "");
+    // Texto conectivo no campo de hint.
+    dom.guidedHint.setAttribute("value", cena.conectivo || "");
   
-  // C4: Perguntas-guia
-  buildGuidedQuestions(cena);
+    // C4: Perguntas-guia
+    buildGuidedQuestions(cena);
 
-  // Atualizar controles e HUD do tour.
-  showTourControls(true);
-  updateTourUI();
+    // Atualizar controles e HUD do tour.
+    showTourControls(true);
+    updateTourUI();
 
-  // Ajustar interacao para modo tour.
-  setInteractionMode("tour");
+    // Ajustar interacao para modo tour.
+    setInteractionMode("tour");
 
-  const tour = TOURS[state.tourId];
-  const tourNome = tour ? tour.titulo : "Tour guiado";
-  dom.hudTitle.textContent = cena.manchete;
-  dom.hudSubtitle.textContent =
-    `${tourNome} — cena ${n + 1} de ${scenes.length}` + (cena.climax ? "  ·  ponto de virada" : "");
-  crumb(tourNome, `cena ${n + 1} de ${scenes.length}`);
+    const tour = TOURS[state.tourId];
+    const tourNome = tour ? tour.titulo : "Tour guiado";
+    dom.hudTitle.textContent = cena.manchete;
+    dom.hudSubtitle.textContent =
+      `${tourNome} — cena ${n + 1} de ${scenes.length}` + (cena.climax ? "  ·  ponto de virada" : "");
+    crumb(tourNome, `cena ${n + 1} de ${scenes.length}`);
 
-  if (!skipFade) {
-    await fadeFromBlack();
-    state.transitioning = false;
+    if (!skipFade) await fadeFromBlack();
+  } finally {
+    if (assumiuTransicao || !skipFade) state.transitioning = false;
   }
 }
 
@@ -2681,7 +2718,7 @@ function buildTourGallery() {
     dom.tourGallery.appendChild(card);
     applyPendingTransforms(card);
 
-    hit.addEventListener("click", () => { if (!state.transitioning) startTour(tourId); });
+    hit.addEventListener("click", () => { if (!state.transitioning) { pushHistory(); startTour(tourId); } });
     hit.addEventListener("mouseenter", () => {
       card.setAttribute("animation__h", "property: scale; to: 1.06 1.06 1.06; dur: 150");
       bg.setAttribute("material", `color: #12183a; roughness: 0.4; metalness: 0.1; emissive: ${tour.cor}; emissiveIntensity: 0.35`);
@@ -2713,10 +2750,12 @@ function backToIndicators() {
 }
 
 function bindBackButton() {
-  const hit = dom.backButton.querySelector(".clickable");
+  // Selecionar pela classe de modo (e nao por ".clickable", que e ligada/desligada
+  // por setInteractionMode) mantem o bind valido em qualquer ordem de inicializacao.
+  const hit = dom.backButton.querySelector(".exploration-clickable");
   hit.addEventListener("mouseenter", () => dom.backButton.setAttribute("animation__hover", "property: scale; to: 1.08 1.08 1.08; dur: 180"));
   hit.addEventListener("mouseleave", () => dom.backButton.setAttribute("animation__hover", "property: scale; to: 1 1 1; dur: 180"));
-  hit.addEventListener("click", returnToSelection);
+  hit.addEventListener("click", navigateBack);
 }
 
 async function returnToSelection() {
@@ -2726,35 +2765,130 @@ async function returnToSelection() {
   stopAmbientDrone();
   stopVisceral();
   state.transitioning = true;
-  await fadeToBlack();
+  try {
+    await fadeToBlack();
 
-  // Limpar tour se estava ativo.
-  state.tourActive = false;
-  setEntityVisible(dom.tourControls, false);
-  setEntityVisible(dom.tourPanel, false);
-  dom.tourBar.hidden = true;
+    // Limpar tour se estava ativo.
+    state.tourActive = false;
+    setEntityVisible(dom.tourControls, false);
+    setEntityVisible(dom.tourPanel, false);
+    dom.tourBar.hidden = true;
 
-  setVectorAttribute(dom.cameraRig, "position", "0 1.6 0");
-  setEntityVisible(dom.explorationWorld, false);
-  setEntityVisible(dom.selectionWorld, true);
-  hideInfoPanelNow();
-  setEntityVisible(dom.timelineView, false);
-  setEntityVisible(dom.composicaoView, false);
-  dom.hudLegend.hidden = true;
-  dom.compLegend.hidden = true;
+    resetCameraRig();
+    setEntityVisible(dom.explorationWorld, false);
+    setEntityVisible(dom.selectionWorld, true);
+    hideInfoPanelNow();
+    setEntityVisible(dom.timelineView, false);
+    setEntityVisible(dom.composicaoView, false);
+    dom.hudLegend.hidden = true;
+    dom.compLegend.hidden = true;
 
-  state.stage = "selection";
-  state.context = null;
-  state.indicatorKey = null;
-  state.compareOn = false;
+    state.stage = "selection";
+    state.context = null;
+    state.indicatorKey = null;
+    state.compareOn = false;
 
-  setEntityVisible(dom.drillCards, false);
-  setEntityVisible(dom.drillBack, false);
-  showMapSelection();
+    setEntityVisible(dom.drillCards, false);
+    setEntityVisible(dom.drillBack, false);
+    showMapSelection();
 
-  setInteractionMode("selection");
-  await fadeFromBlack();
-  state.transitioning = false;
+    state.history = []; // chegou na tela inicial: zera a pilha de navegacao.
+    setInteractionMode("selection");
+    await fadeFromBlack();
+  } finally {
+    state.transitioning = false;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Historico de navegacao: "Voltar" retorna a tela anterior (nao a inicial).
+// ----------------------------------------------------------------------------
+
+// Empilha um retrato da tela ATUAL antes de avancar para a proxima.
+function pushHistory() {
+  state.history.push({
+    stage: state.stage,
+    context: state.context,
+    indicatorKey: state.indicatorKey,
+    parentRegion: state.parentRegion,
+    drillRegion: state.drillRegion,
+  });
+}
+
+// Desempilha e retorna a tela anterior; se a pilha estiver vazia, vai ao mapa.
+function navigateBack() {
+  if (state.transitioning) return;
+  // Sair pelo "Voltar" no meio de um tour encerra o tour (senao a barra de
+  // progresso e os controles ficariam ligados numa tela de exploracao livre).
+  if (state.tourActive) {
+    state.tourActive = false;
+    showTourControls(false);
+    setEntityVisible(dom.tourPanel, false);
+    dom.tourBar.hidden = true;
+    stopVisceral();
+  }
+  const prev = state.history.pop();
+  if (!prev) { returnToSelection(); return; }
+  state.parentRegion = prev.parentRegion || null;
+  state.drillRegion = prev.drillRegion || null;
+  switch (prev.stage) {
+    case "drill":
+      if (prev.drillRegion) { enterDrill(prev.drillRegion); return; }
+      returnToSelection(); return;
+    case "indicators":
+      if (prev.context) { enterIndicators(prev.context); return; }
+      returnToSelection(); return;
+    case "multiplos":
+      enterMultiplos(prev.indicatorKey || "eficiencia"); return;
+    case "timeline":
+      if (prev.context) { state.context = prev.context; enterTimeline(prev.indicatorKey); return; }
+      returnToSelection(); return;
+    case "composicao":
+      // enterComposicao le state.context: sem restaurar o contexto do historico,
+      // a tela seria montada com os dados da tela atual.
+      if (prev.context) { state.context = prev.context; enterComposicao(); return; }
+      returnToSelection(); return;
+    case "selection":
+    default:
+      returnToSelection(); return;
+  }
+}
+
+// Restaura a tela de drill (lista de instituicoes) vindo do mundo de exploracao:
+// troca de mundo e reabre o drill da regiao. openDrill sozinho nao troca de mundo.
+async function enterDrill(region) {
+  if (state.transitioning || !region) return;
+  cancelGuided();
+  stopNarration();
+  stopAmbientDrone();
+  stopVisceral();
+  state.transitioning = true;
+  try {
+    await fadeToBlack();
+
+    state.tourActive = false;
+    setEntityVisible(dom.tourControls, false);
+    setEntityVisible(dom.tourPanel, false);
+    dom.tourBar.hidden = true;
+
+    resetCameraRig();
+    setEntityVisible(dom.explorationWorld, false);
+    setEntityVisible(dom.selectionWorld, true);
+    hideInfoPanelNow();
+    setEntityVisible(dom.indicatorView, false);
+    setEntityVisible(dom.timelineView, false);
+    setEntityVisible(dom.composicaoView, false);
+    setEntityVisible(dom.multiplosView, false);
+    dom.hudLegend.hidden = true;
+    dom.compLegend.hidden = true;
+
+    state.parentRegion = null;
+    openDrill(region); // define stage="drill", monta cards, mostra drillBack e ajusta interacao.
+
+    await fadeFromBlack();
+  } finally {
+    state.transitioning = false;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -2776,8 +2910,21 @@ function setInteractionMode(mode) {
 
 function toggleClickable(selector, enabled) {
   document.querySelectorAll(selector).forEach((entity) => {
-    entity.classList.toggle("clickable", enabled);
+    // Nunca ligar o raycaster em algo que esta escondido: o alvo invisivel rouba
+    // o clique/gaze (ex.: CTA do tour, aba do mini-mapa durante o tour).
+    entity.classList.toggle("clickable", enabled && isEntityVisible(entity));
   });
+}
+
+// Visibilidade efetiva: o elemento e todos os ancestrais precisam estar visiveis.
+function isEntityVisible(entity) {
+  let atual = entity;
+  while (atual && atual.getAttribute) {
+    const attr = atual.getAttribute("visible");
+    if (attr === false || attr === "false") return false;
+    atual = atual.parentElement;
+  }
+  return true;
 }
 
 // Liga/desliga a clicabilidade de um sub-conjunto de controles da timeline.
@@ -2795,12 +2942,60 @@ function setSubtreeClickable(root, enabled) {
 
 function bindVrCursorMode() {
   dom.scene.addEventListener("enter-vr", () => {
-    setGazeFuse(true);
+    resetCameraRig();                       // em VR o headset define a altura (rig y=0)
+    if (!state.usingControllers) setGazeFuse(true); // sem controle, usa o gaze
+    if (dom.vrHud) setEntityVisible(dom.vrHud, true); // HUD 2D some no headset -> mostra o 3D
     dismissOnboarding(); // overlay 2D nao aparece no headset; a placa #roomSign cobre VR
   });
-  dom.scene.addEventListener("exit-vr", () => setGazeFuse(false));
+  dom.scene.addEventListener("exit-vr", () => {
+    setGazeFuse(false);
+    resetCameraRig();                       // desktop: volta a altura fixa (rig y=1.6)
+    if (dom.vrHud) setEntityVisible(dom.vrHud, false); // desktop usa o HUD 2D
+    ["rightHand", "leftHand"].forEach((id) => {
+      const h = document.getElementById(id);
+      if (h) { setEntityVisible(h, false); h.setAttribute("raycaster", "enabled", false); }
+    });
+  });
   setGazeFuse(false);
+  bindControllers();
   bindDragGuard();
+}
+
+// Altura do rig: em VR o WebXR ja fornece a altura real do headset (reference space
+// local-floor), entao o offset do rig deve ser 0; no desktop, mantemos 1.6 (altura dos olhos).
+function resetCameraRig() {
+  const emVR = dom.scene && dom.scene.is && dom.scene.is("vr-mode");
+  setVectorAttribute(dom.cameraRig, "position", emVR ? "0 0 0" : "0 1.6 0");
+}
+
+// Controles Touch do Quest: ligam o laser/gatilho quando conectam e desligam o gaze
+// (evita cursor duplicado). No desktop nunca conectam, entao ficam invisiveis e inertes.
+function bindControllers() {
+  const anyControllerConnected = () => ["rightHand", "leftHand"].some((id) => {
+    const h = document.getElementById(id);
+    const tc = h && h.components && h.components["tracked-controls"];
+    return !!(tc && tc.controller);
+  });
+  ["rightHand", "leftHand"].forEach((id) => {
+    const hand = document.getElementById(id);
+    if (!hand) return;
+    hand.addEventListener("controllerconnected", () => {
+      setEntityVisible(hand, true);
+      hand.setAttribute("raycaster", "enabled", true);
+      state.usingControllers = true;
+      setGazeFuse(false); // controle assume a mira
+      refreshRaycasters();
+    });
+    hand.addEventListener("controllerdisconnected", () => {
+      setEntityVisible(hand, false);
+      hand.setAttribute("raycaster", "enabled", false);
+      if (!anyControllerConnected()) {
+        state.usingControllers = false;
+        if (dom.scene.is("vr-mode")) setGazeFuse(true); // sem controle, volta ao gaze
+      }
+      refreshRaycasters();
+    });
+  });
 }
 
 // No desktop o giro por mouse fica desativado (look-controls mouseEnabled:false), entao
@@ -2921,6 +3116,13 @@ function rotuloContexto(ctx) {
   return ctx.nome;
 }
 
+// Nome curto do indicador para botoes/chips: "Taxa de Evasao" -> "Evasao",
+// "Eficiencia Academica" -> "Eficiencia".
+function rotuloIndicadorCurto(ind) {
+  if (!ind) return "";
+  return ind.label.replace(/^Taxa de\s+/i, "").replace(/\s+Academica$/i, "");
+}
+
 function rotuloCurto(ctx) {
   if (!ctx) return "";
   if (ctx.tipo === "brasil") return "Brasil";
@@ -2945,18 +3147,6 @@ function clickable(controlEntity) {
 // Layout de cards.
 // ----------------------------------------------------------------------------
 
-function arcPositions(n, radius, spreadDeg, y) {
-  const positions = [];
-  for (let i = 0; i < n; i += 1) {
-    const t = n === 1 ? 0 : i / (n - 1) - 0.5;
-    const angle = (t * spreadDeg * Math.PI) / 180;
-    const x = Math.sin(angle) * radius;
-    const z = -Math.cos(angle) * radius;
-    const rotY = (-t * spreadDeg) / 1.4;
-    positions.push({ position: `${round2(x)} ${y} ${round2(z)}`, rotation: `0 ${round2(rotY)} 0` });
-  }
-  return positions;
-}
 
 function gridPositions(n, cols, gapX, gapY, topY, z) {
   const positions = [];
@@ -3108,58 +3298,66 @@ async function enterMultiplos(indicadorKey = "eficiencia", skipFade = false) {
     await fadeToBlack();
   }
 
-  state.stage = "multiplos";
-  state.indicatorKey = indicadorKey;
-  state.context = null;
+  try {
+    state.stage = "multiplos";
+    state.indicatorKey = indicadorKey;
+    state.context = null;
 
-  setVectorAttribute(dom.cameraRig, "position", "0 1.6 0");
-  setEntityVisible(dom.selectionWorld, false);
-  setEntityVisible(dom.explorationWorld, true);
-  setEntityVisible(dom.indicatorView, false);
-  setEntityVisible(dom.timelineView, false);
-  setEntityVisible(dom.composicaoView, false);
-  setEntityVisible(dom.multiplosView, true);
-  hideInfoPanelNow();
-  dom.hudLegend.hidden = true;
-  dom.compLegend.hidden = true;
-  // O mini-mapa (hot-swap de um contexto) nao se aplica a visao "todas as regioes".
-  closeMiniMap();
-  setEntityVisible(dom.miniMapBase, false);
+    resetCameraRig();
+    setEntityVisible(dom.selectionWorld, false);
+    setEntityVisible(dom.explorationWorld, true);
+    setEntityVisible(dom.indicatorView, false);
+    setEntityVisible(dom.timelineView, false);
+    setEntityVisible(dom.composicaoView, false);
+    setEntityVisible(dom.multiplosView, true);
+    hideInfoPanelNow();
+    dom.hudLegend.hidden = true;
+    dom.compLegend.hidden = true;
+    // O mini-mapa (hot-swap de um contexto) nao se aplica a visao "todas as regioes".
+    closeMiniMap();
+    setEntityVisible(dom.miniMapBase, false);
 
-  buildMultiplosSelectors();
-  buildMultiplos();
-  animateViewIn(dom.multiplosView);
+    buildMultiplosSelectors();
+    buildMultiplos();
+    animateViewIn(dom.multiplosView);
 
-  dom.hudTitle.textContent = "Comparar regioes";
-  dom.hudSubtitle.textContent = "Comparacao em mesma escala";
-  setNota("multiplos");
-  setInteractionMode("multiplos");
+    dom.hudTitle.textContent = "Comparar regioes";
+    dom.hudSubtitle.textContent = multiplosSubtitle;
+    setNota("multiplos");
+    setInteractionMode("multiplos");
 
-  if (!skipFade) {
-    await fadeFromBlack();
-    state.transitioning = false;
+    if (!skipFade) await fadeFromBlack();
+  } finally {
+    // So libera quem assumiu a transicao (skipFade = chamada de dentro de outra).
+    if (!skipFade) state.transitioning = false;
   }
 }
 
 function buildMultiplosSelectors() {
   dom.multiplosSelectors.innerHTML = "";
-  let currentX = -2.7;
+  // Faixa mais estreita (1,4 de largura, passo 1,55): a linha inteira cabe entre
+  // 25% e 75% da tela, longe do painel HUD do canto superior esquerdo.
+  const w = 1.4;
+  const passo = 1.55;
+  let currentX = -((DADOS.indicadores.length - 1) * passo) / 2;
   DADOS.indicadores.forEach((ind) => {
     const isAtivo = ind.key === state.indicatorKey;
     const corBase = isAtivo ? ind.cor : "#16263f";
     const emissive = isAtivo ? ind.cor : "#2f5d8a";
     const int = isAtivo ? 0.35 : 0.2;
-    
-    const w = 1.6;
-    const btn = el("a-entity", { position: `${currentX} 0 0` });
+
+    const btn = el("a-entity", { position: `${round2(currentX)} 0 0` });
     const bg = el("a-box", {
       class: "multiplos-clickable hit",
-      width: w, height: 0.44, depth: 0.08,
+      width: w, height: 0.42, depth: 0.08,
       material: `color: ${corBase}; roughness: 0.45; emissive: ${emissive}; emissiveIntensity: ${int}`
     });
+    // Rotulo curto ("Taxa de Evasao" -> "Evasao", "Eficiencia Academica" ->
+    // "Eficiencia"): uma palavra por botao, sem estourar a largura de 1,4.
     const label = el("a-text", {
-      value: ind.label, position: "0 0 0.05",
-      width: 2.2, align: "center", color: isAtivo ? "#ffffff" : "#cfe9ff", font: "kelsonsans"
+      value: rotuloIndicadorCurto(ind), position: "0 0 0.05",
+      width: 1.2, align: "center", color: isAtivo ? "#ffffff" : "#cfe9ff", font: "kelsonsans",
+      "wrap-count": 12
     });
     btn.append(bg, label);
     
@@ -3182,7 +3380,7 @@ function buildMultiplosSelectors() {
     
     dom.multiplosSelectors.appendChild(btn);
     applyPendingTransforms(btn);
-    currentX += w + 0.2;
+    currentX += passo;
   });
 }
 
@@ -3214,14 +3412,25 @@ function buildMultiplos() {
     const diff = Math.abs(maxReg.val - minReg.val).toFixed(1).replace(".", ",");
     const pontaStr = indDef.sentido === "negativo" ? "pior" : "lidera";
     const baseStr = indDef.sentido === "negativo" ? "melhor" : "na lanterna";
-    // Titulo curto (1 linha) + detalhe na nota, para nao encavalar o cabecalho.
+    // Titulo curto (1 linha) + nota curta (1 linha). A frase completa vai para o
+    // HUD 2D (subtitulo), evitando um bloco de texto alto no cabecalho 3D.
     dom.multiplosTitle.setAttribute("value", `${indDef.label} por regiao (2024)`);
-    dom.multiplosNote.setAttribute("value", `${maxReg.ctx.nome} ${pontaStr} (${fmt(maxReg.val)}%)  ·  ${minReg.ctx.nome} ${baseStr} (${fmt(minReg.val)}%)  —  ${diff} pp de diferenca`);
+    dom.multiplosNote.setAttribute(
+      "value",
+      `${maxReg.ctx.nome} ${fmt(maxReg.val)}%  ·  ${minReg.ctx.nome} ${fmt(minReg.val)}%  ·  abismo de ${diff} pp`
+    );
+    multiplosSubtitle = `${maxReg.ctx.nome} ${pontaStr} (${fmt(maxReg.val)}%) e ${minReg.ctx.nome} ${baseStr} (${fmt(minReg.val)}%) — ${diff} pp de diferenca`;
   } else {
     dom.multiplosTitle.setAttribute("value", `${indDef.label} por regiao (2024)`);
     dom.multiplosNote.setAttribute("value", "");
+    multiplosSubtitle = "Comparacao em mesma escala";
   }
-  
+  dom.hudSubtitle.textContent = multiplosSubtitle;
+
+  // A amostra da legenda acompanha a cor do indicador selecionado.
+  const legendSwatch = dom.multiplosLegend ? dom.multiplosLegend.querySelector("a-plane") : null;
+  if (legendSwatch) legendSwatch.setAttribute("material", `color: ${indCor}; shader: flat; opacity: 0.8`);
+
   items.forEach((item, index) => {
     const col = index % MULTIPLOS.cols;
     const row = Math.floor(index / MULTIPLOS.cols);
@@ -3238,16 +3447,25 @@ function buildMultiplos() {
     const isBrasil = item.ctx.tipo === "brasil";
     const headerCor = isBrasil ? "#7bdcff" : "#cfe0f4";
     const titleText = isBrasil ? "BRASIL" : item.ctx.nome;
-    
+    const hx = MULTIPLOS.w / 2 - 0.1; // margem interna do cabecalho do painel
+
+    // Regua de separacao entre o cabecalho (nome + valor) e o mini-grafico:
+    // deixa claro que o texto nao faz parte da area de plotagem.
+    const headerRule = el("a-plane", {
+      width: MULTIPLOS.w - 0.2, height: 0.006,
+      position: `0 ${round2(MULTIPLOS.headerY - 0.11)} 0.02`,
+      material: "color: #2f5d8a; opacity: 0.45; transparent: true; shader: flat",
+    });
+
     const title = el("a-text", {
-      value: titleText, position: `-0.8 0.4 0.02`, width: 2.2,
-      align: "left", color: headerCor, font: "kelsonsans"
+      value: titleText, position: `${round2(-hx)} ${MULTIPLOS.headerY} 0.02`, width: 2.1,
+      align: "left", anchor: "left", color: headerCor, font: "kelsonsans"
     });
     const valText = el("a-text", {
-      value: `${fmt(item.val)}%`, position: `0.8 0.4 0.02`, width: 2.2,
-      align: "right", color: indCor, font: "kelsonsans"
+      value: `${fmt(item.val)}%`, position: `${round2(hx)} ${MULTIPLOS.headerY} 0.02`, width: 2.1,
+      align: "right", anchor: "right", color: indCor, font: "kelsonsans"
     });
-    
+
     const hit = el("a-plane", {
       class: "multiplos-clickable hit",
       width: MULTIPLOS.w, height: MULTIPLOS.h, position: "0 0 0.05",
@@ -3256,6 +3474,7 @@ function buildMultiplos() {
     
     hit.addEventListener("click", () => {
       if (state.transitioning) return;
+      pushHistory(); // vindo do small multiples -> "Voltar" retorna a comparacao.
       // Vai direto a linha do tempo do contexto, sem renderizar a etapa de
       // indicadores no meio (evita o flash). Transicao in-place como no gauge -> timeline.
       state.context = item.ctx;
@@ -3272,10 +3491,10 @@ function buildMultiplos() {
     });
     hit.addEventListener("mouseleave", () => {
       bg.setAttribute("material", "opacity", 0.6);
-      dom.hudSubtitle.textContent = "Comparacao em mesma escala";
+      dom.hudSubtitle.textContent = multiplosSubtitle;
     });
     
-    panel.append(bg, title, valText, hit);
+    panel.append(bg, headerRule, title, valText, hit);
     buildMiniChart(panel, item.ctx, key, DADOS.brasil);
     dom.multiplosGrid.appendChild(panel);
     // Aplica as transformacoes (posicao do painel + filhos) no object3D; sem isto o
@@ -3291,9 +3510,9 @@ function buildMiniChart(container, ctx, key, brasilCtx) {
   const brasilSeries = brasilCtx.series[key];
   const indDef = indicadorByKey(key);
 
-  const paddingX = 0.2;
-  const bottomY = -0.4;
-  const topY = 0.2;
+  const paddingX = MULTIPLOS.chartPadX;
+  const bottomY = MULTIPLOS.chartBottom;
+  const topY = MULTIPLOS.chartTop;
   const width = MULTIPLOS.w - paddingX * 2;
   const height = topY - bottomY;
   const n = series.length;
@@ -3303,6 +3522,14 @@ function buildMiniChart(container, ctx, key, brasilCtx) {
   const localX = (idx) => -width / 2 + idx * stepX;
   // Mantem o comprimento da serie (null = ano sem matricula) para preservar gaps.
   const ptsFrom = (s) => s.map((v, i) => (v == null ? null : { x: localX(i), y: localY(v) }));
+
+  // Linha de base (0%): ancora visual do mini-grafico.
+  const base = el("a-plane", {
+    width: width + 0.08, height: 0.006, position: `0 ${round2(bottomY)} 0.01`,
+    material: "color: #2f5d8a; opacity: 0.4; transparent: true; shader: flat",
+  });
+  container.appendChild(base);
+  applyPendingTransforms(base);
 
   // Linha de referencia da media nacional (tracejada), so em paineis regionais.
   if (ctx.tipo !== "brasil") {
