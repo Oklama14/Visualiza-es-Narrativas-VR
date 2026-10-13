@@ -1,9 +1,22 @@
 // ----------------------------------------------------------------------------
-// Fase 4 - Modo estudo (?estudo=1&p=P01).
-// Painel 2D do PESQUISADOR (DOM: aparece no monitor espelhado, nunca dentro do
-// headset) com 3 tarefas de compreensao CALCULADAS dos dados - nada fixo. O
-// participante ve a pergunta como legenda no mundo; o pesquisador clica na
-// opcao respondida em voz alta. Tempo e acerto vao para a telemetria.
+// Modo estudo (?estudo=1&p=P01) - lado do PARTICIPANTE.
+//
+// Quem conduz a sessao e a ESTACAO DO PESQUISADOR (pesquisador.html, aberta no
+// notebook que roda o server.js). Ela manda comandos para esta pagina pelo
+// canal da telemetria (01-telemetria.js):
+//   tarefa-iniciar / tarefa-encerrar ... a pergunta aparece (e some) como
+//                                        legenda fixa dentro do headset
+//   treino-iniciar / treino-encerrar ... a etapa de treino (85-treino.js)
+//   mensagem ........................... um aviso curto na legenda
+//   ir-entrada ......................... leva a pessoa de volta a porta
+// A resposta falada e registrada pelo pesquisador NA ESTACAO (com o tempo
+// medido la). As tarefas e o gabarito vem de 07-tarefas.js - a mesma
+// definicao da condicao 2D.
+//
+// Painel local (?painel=local): o painel antigo, em DOM, para quando a pagina
+// roda no PC (Quest Link / Air Link / desktop) e nao ha estacao. Ele so
+// aparece no monitor, nunca dentro do headset.
+//
 // Fora do modo estudo, este modulo so mantem o lembrete de conforto em VR.
 // ----------------------------------------------------------------------------
 
@@ -11,7 +24,7 @@
   const params = new URLSearchParams(window.location.search);
   const modoEstudo = params.get("estudo") === "1";
 
-  // ---- 4.4 Conforto: tempo continuo em headset + lembrete de pausa ----
+  // ---- Conforto: tempo continuo em headset + lembrete de pausa ----
   const PAUSA_MIN = 20;
   let vrDesde = null;
   let pausaTimer = null;
@@ -27,10 +40,7 @@
         if (!vrDesde) return;
         const min = Math.round((Date.now() - vrDesde) / 60000);
         if (min >= PAUSA_MIN && min % PAUSA_MIN === 0) {
-          if (typeof setCaption === "function") {
-            setCaption(`Voce esta ha ${min} min em VR - que tal uma pausa?`);
-            setTimeout(() => { if (!state.narrating) setCaption(""); }, 6000);
-          }
+          if (typeof setCaption === "function") setCaption(`Você está há ${min} min em VR - que tal uma pausa?`, 6000);
           tlog("vr", { evento: "lembrete-pausa", min });
         }
       }, 60000);
@@ -44,41 +54,70 @@
 
   if (!modoEstudo) return;
 
-  // ---- 4.2 Tarefas de compreensao (derivadas de dados.json) ----
-  let tarefas = null;
+  // ---- Tarefas (07-tarefas.js) ----
+  let pacote = null;
+  function tarefas() {
+    if (!pacote && typeof DADOS !== "undefined" && DADOS) pacote = gerarTarefas(DADOS);
+    return pacote;
+  }
+  function acharTarefa(id) {
+    const p = tarefas();
+    if (!p) return null;
+    const i = p.lista.findIndex((t) => t.id === id);
+    return i < 0 ? null : { t: p.lista[i], n: i + 1 };
+  }
+
+  function exibirTarefa(id, origem) {
+    const a = acharTarefa(id);
+    if (!a) return;
+    if (state.treino) encerrarTreino("tarefa");
+    setLegendaFixa(`TAREFA ${a.n}: ${a.t.pergunta}`);
+    tlog("tarefa", { id, evento: "exibida", origem });
+  }
+
+  function encerrarTarefa(id, origem) {
+    setLegendaFixa("");
+    setCaption("Resposta registrada. Obrigado!", 2500);
+    tlog("tarefa", { id: id || null, evento: "encerrada", origem });
+  }
+
+  // ---- Comandos da estacao do pesquisador ----
+  if (window.Telemetry && window.Telemetry.aoComando) {
+    window.Telemetry.aoComando((c) => {
+      if (!state.pronto) return;
+      switch (c.tipo) {
+        case "tarefa-iniciar":
+          exibirTarefa(c.id, "estacao");
+          break;
+        case "tarefa-encerrar":
+          encerrarTarefa(c.id, "estacao");
+          break;
+        case "treino-iniciar":
+          iniciarTreino("estacao");
+          break;
+        case "treino-encerrar":
+          encerrarTreino("estacao");
+          break;
+        case "mensagem":
+          setCaption(String(c.texto || "").slice(0, 120), Math.min(20000, Number(c.ms) || 7000));
+          break;
+        case "ir-entrada":
+          irPara("entrada");
+          break;
+        default:
+          break;
+      }
+    });
+  }
+
+  // ---- Painel local (?painel=local) ----
+  if (params.get("painel") !== "local") return;
+
   let tarefaAtual = -1;
   let emAndamento = false;
   let tarefaT0 = 0;
   let areaEl = null;
 
-  function montarTarefas() {
-    if (tarefas || typeof DADOS === "undefined" || !DADOS) return;
-    const anos = DADOS.anos;
-
-    const bEv = DADOS.brasil.series.evasao;
-    let pico = 0;
-    bEv.forEach((v, i) => { if (v != null && (bEv[pico] == null || v > bEv[pico])) pico = i; });
-
-    const regioesEf = DADOS.regioes.map((r) => ({ nome: r.nome, v: latestValue(r.series.eficiencia) ?? -1 }));
-    const topEf = regioesEf.reduce((a, b) => (b.v > a.v ? b : a));
-
-    const i24 = anos.length - 1;
-    const m = DADOS.brasil.series.matriculas[i24];
-    const conc = DADOS.brasil.series.contagens.concluidos[i24];
-    const pc = Math.round((conc / m) * 100);
-    const faixaDe = (p) => (p < 20 ? "menos de 20" : p < 40 ? "20 a 39" : p < 60 ? "40 a 59" : p < 80 ? "60 a 79" : "80 ou mais");
-
-    tarefas = [
-      { id: "T1", pergunta: "Em que ano a evasao do Brasil foi mais ALTA?",
-        opcoes: anos.map(String), correta: String(anos[pico]) },
-      { id: "T2", pergunta: "Qual regiao tem a MAIOR eficiencia academica em 2024?",
-        opcoes: DADOS.regioes.map((r) => r.nome), correta: topEf.nome },
-      { id: "T3", pergunta: "De cada 100 estudantes do Brasil (2024), quantos CONCLUIRAM?",
-        opcoes: ["menos de 20", "20 a 39", "40 a 59", "60 a 79", "80 ou mais"], correta: faixaDe(pc) },
-    ];
-  }
-
-  // ---- 4.1 Painel do pesquisador ----
   function botao(rotulo, onClick, destaque) {
     const b = document.createElement("button");
     b.type = "button";
@@ -93,49 +132,47 @@
   }
 
   function iniciarTarefa(i) {
+    const t = tarefas().lista[i];
     tarefaAtual = i;
     emAndamento = true;
     tarefaT0 = performance.now();
-    const t = tarefas[i];
-    tlog("tarefa", { id: t.id, evento: "inicio" });
-    if (typeof setCaption === "function") setCaption(`TAREFA ${i + 1}: ${t.pergunta}`);
+    tlog("tarefa", { id: t.id, evento: "inicio", origem: "painel-local" });
+    exibirTarefa(t.id, "painel-local");
     renderEstado();
   }
 
   function responder(opcao) {
-    const t = tarefas[tarefaAtual];
+    const t = tarefas().lista[tarefaAtual];
     const tempoMs = Math.round(performance.now() - tarefaT0);
-    const correta = opcao === t.correta;
-    tlog("tarefa", { id: t.id, evento: "resposta", resposta: opcao, correta, tempoMs });
+    const r = corrigirResposta(t, opcao);
+    tlog("tarefa", { id: t.id, evento: "resposta", resposta: opcao, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs, origem: "painel-local" });
     emAndamento = false;
-    if (typeof setCaption === "function") {
-      setCaption("Resposta registrada. Obrigado!");
-      setTimeout(() => { if (!state.narrating) setCaption(""); }, 2500);
-    }
+    encerrarTarefa(t.id, "painel-local");
     renderEstado();
   }
 
   function renderEstado() {
     if (!areaEl) return;
-    montarTarefas();
+    const p = tarefas();
     areaEl.innerHTML = "";
-    if (!tarefas) {
+    if (!p) {
       areaEl.textContent = "Aguardando dados...";
       setTimeout(renderEstado, 800);
       return;
     }
     if (emAndamento) {
-      const t = tarefas[tarefaAtual];
-      const p = document.createElement("div");
-      p.style.cssText = "color:#fff;font-weight:600";
-      p.textContent = `${t.id}: ${t.pergunta}`;
-      areaEl.appendChild(p);
+      const t = p.lista[tarefaAtual];
+      const q = document.createElement("div");
+      q.style.cssText = "color:#fff;font-weight:600";
+      q.textContent = `${t.id}: ${t.pergunta}`;
+      areaEl.appendChild(q);
       t.opcoes.forEach((op) => areaEl.appendChild(botao(op, () => responder(op))));
       return;
     }
     const prox = tarefaAtual + 1;
-    if (prox < tarefas.length) {
-      areaEl.appendChild(botao(`Iniciar tarefa ${prox + 1} de ${tarefas.length}`, () => iniciarTarefa(prox), true));
+    if (tarefaAtual < 0) areaEl.appendChild(botao(state.treino ? "Encerrar treino" : "Treino (3 gestos)", () => (state.treino ? encerrarTreino("painel-local") : iniciarTreino("painel-local"))));
+    if (prox < p.lista.length) {
+      areaEl.appendChild(botao(`Iniciar tarefa ${prox + 1} de ${p.lista.length}`, () => iniciarTarefa(prox), true));
       const dica = document.createElement("div");
       dica.style.cssText = "margin-top:6px;color:#9fb0c8;font-size:12px";
       dica.textContent = "A pergunta aparece como legenda para o participante; registre aqui a resposta falada.";
@@ -143,9 +180,9 @@
     } else {
       const fim = document.createElement("div");
       fim.style.cssText = "color:#8fe3c0;font-weight:600";
-      fim.textContent = "Tarefas concluidas.";
+      fim.textContent = "Tarefas concluídas.";
       areaEl.appendChild(fim);
-      areaEl.appendChild(botao("Exportar sessao", () => window.Telemetry.exportar(), true));
+      areaEl.appendChild(botao("Exportar sessão", () => window.Telemetry.exportar(), true));
     }
   }
 
@@ -159,10 +196,13 @@
       "font:13px/1.45 Inter,ui-sans-serif,sans-serif";
     const part = params.get("p") || "sem-id";
     panel.innerHTML =
-      `<div style="font-weight:700;color:#b8a9ff;font-size:11px;letter-spacing:.06em;text-transform:uppercase">Modo estudo · ${part}</div>` +
+      `<div style="font-weight:700;color:#b8a9ff;font-size:11px;letter-spacing:.06em;text-transform:uppercase">Modo estudo · painel local · ${part.replace(/[^A-Za-z0-9_-]/g, "")}</div>` +
       '<div id="studyArea" style="margin-top:8px"></div>';
     document.body.appendChild(panel);
     areaEl = panel.querySelector("#studyArea");
     renderEstado();
+    setInterval(() => {
+      if (!emAndamento) renderEstado();
+    }, 1500);
   });
 })();

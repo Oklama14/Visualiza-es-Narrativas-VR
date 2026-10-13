@@ -189,6 +189,15 @@ if (typeof AFRAME !== "undefined") {
       const tc = this.el.components["tracked-controls"];
       const rastreada = !!(c && c.hasPoses && tc && tc.controller && tc.controller.hand);
       if (this.el.object3D.visible !== rastreada) this.el.object3D.visible = rastreada;
+      // Telemetria: cada vez que a mao entra ou sai do rastreamento dentro do
+      // headset. Perda de rastreio so existe na condicao imersiva - e um
+      // confundidor (e causa de frustracao) que a analise precisa enxergar.
+      if (this.rastreada !== rastreada) {
+        if (this.rastreada !== undefined && this.el.sceneEl.is("vr-mode") && typeof tlog === "function") {
+          tlog("rastreio", { mao: c ? c.data.hand : null, estado: rastreada ? "ok" : "perdido" });
+        }
+        this.rastreada = rastreada;
+      }
     },
   });
 

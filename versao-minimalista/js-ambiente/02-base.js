@@ -31,6 +31,8 @@ const state = {
   transitioning: false,
   narrating: false, // usado pelo modo estudo (legendas)
   maoAtiva: false, // hand tracking detectado nesta sessao
+  legendaFixa: "", // pergunta da tarefa / instrucao do treino (ver setLegendaFixa)
+  treino: false, // etapa de treino em andamento (85-treino.js)
 };
 
 // Paleta do ambiente (espelha o desenho da planta).
@@ -309,9 +311,19 @@ function shadeColor(hex, percent) {
 // headset (o HUD em DOM nao aparece la).
 let legendaTimer = null;
 
+// Legenda FIXA: a pergunta de uma tarefa do estudo (ou a instrucao do treino)
+// tem de continuar visivel enquanto a pessoa explora. As dicas passageiras
+// ("Olhe para um ano...") ainda aparecem por cima dela, mas, quando somem, a
+// fixa volta - antes a dica apagava a pergunta e ela nao voltava mais.
+function setLegendaFixa(text) {
+  state.legendaFixa = text || "";
+  setCaption(state.legendaFixa);
+}
+
 function setCaption(text, autoHideMs) {
-  if (dom.captionText) setText(dom.captionText, text || "");
-  if (dom.captionPanel) setEntityVisible(dom.captionPanel, !!(text && text.length));
+  const t = text || state.legendaFixa || "";
+  if (dom.captionText) setText(dom.captionText, t);
+  if (dom.captionPanel) setEntityVisible(dom.captionPanel, !!t.length);
   clearTimeout(legendaTimer);
   if (text && autoHideMs) {
     legendaTimer = setTimeout(() => {

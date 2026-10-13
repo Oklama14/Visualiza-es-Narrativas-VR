@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050711'/%3E%3Crect x='14' y='22' width='36' height='26' rx='3' fill='%231d9e75'/%3E%3Crect x='18' y='10' width='28' height='8' rx='2' fill='%238b7fe8'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=21" />
+    <link rel="stylesheet" href="styles.css?v=22" />
     <!-- A-Frame: tenta a copia LOCAL (offline) e cai no CDN se ela nao existir. -->
     <script src="assets/aframe-1.5.0.min.js"></script>
     <script>
@@ -335,20 +335,22 @@
       </a-entity>
     </a-scene>
 
-    <!-- Ordem importa: planta -> base -> dados/audio -> headset -> construtores -> boot. -->
-    <script src="js-ambiente/00-planta.js?v=21"></script>
-    <script src="js-ambiente/01-telemetria.js?v=21"></script>
-    <script src="js-ambiente/02-base.js?v=21"></script>
-    <script src="js-ambiente/03-audio.js?v=21"></script>
-    <script src="js-ambiente/04-narrativa.js?v=21"></script>
-    <script src="js-ambiente/05-headset.js?v=21"></script>
-    <script src="js-ambiente/10-voxel.js?v=21"></script>
-    <script src="js-ambiente/15-sala.js?v=21"></script>
-    <script src="js-ambiente/20-mapa.js?v=21"></script>
-    <script src="js-ambiente/30-contexto.js?v=21"></script>
-    <script src="js-ambiente/40-painel.js?v=21"></script>
-    <script src="js-ambiente/50-interacao.js?v=21"></script>
-    <script src="js-ambiente/60-boot.js?v=21"></script>
-    <script src="js-ambiente/90-estudo.js?v=21"></script>
+    <!-- Ordem importa: planta -> telemetria -> base -> dados/audio -> headset -> tarefas -> construtores -> boot -> treino -> estudo. -->
+    <script src="js-ambiente/00-planta.js?v=22"></script>
+    <script src="js-ambiente/01-telemetria.js?v=22"></script>
+    <script src="js-ambiente/02-base.js?v=22"></script>
+    <script src="js-ambiente/03-audio.js?v=22"></script>
+    <script src="js-ambiente/04-narrativa.js?v=22"></script>
+    <script src="js-ambiente/05-headset.js?v=22"></script>
+    <script src="js-ambiente/07-tarefas.js?v=22"></script>
+    <script src="js-ambiente/10-voxel.js?v=22"></script>
+    <script src="js-ambiente/15-sala.js?v=22"></script>
+    <script src="js-ambiente/20-mapa.js?v=22"></script>
+    <script src="js-ambiente/30-contexto.js?v=22"></script>
+    <script src="js-ambiente/40-painel.js?v=22"></script>
+    <script src="js-ambiente/50-interacao.js?v=22"></script>
+    <script src="js-ambiente/60-boot.js?v=22"></script>
+    <script src="js-ambiente/85-treino.js?v=22"></script>
+    <script src="js-ambiente/90-estudo.js?v=22"></script>
   </body>
 </html>

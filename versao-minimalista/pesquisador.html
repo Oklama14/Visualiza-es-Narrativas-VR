@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Estação do pesquisador</title>
+<!--
+  ESTACAO DO PESQUISADOR - abrir NO NOTEBOOK que roda "node server.js --quest":
+    http://127.0.0.1:4173/pesquisador.html
+  Conduz a sessao inteira sem tocar no headset: triagem, SSQ antes e depois,
+  treino, exploracao livre, as 3 tarefas (a pergunta aparece para o
+  participante; a resposta falada e registrada aqui, com o tempo medido aqui)
+  e o download dos dados. Tudo vai para dados-estudo/<participante>.jsonl,
+  junto com a telemetria do headset. A api so aceita estes registros vindos do
+  proprio notebook (127.0.0.1).
+-->
+<style>
+  :root { --bg:#070b16; --card:#0b1322; --borda:rgba(255,255,255,.14); --txt:#eaf2ff; --fraco:#9fb2d6; --roxo:#7b61ff; --ok:#3ad29f; --alerta:#ffb454; --erro:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.45 Inter,ui-sans-serif,system-ui,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:18px 16px 60px; }
+  h1 { font-size:1.25rem; margin:0; }
+  .topo { display:flex; flex-wrap:wrap; gap:12px; align-items:end; justify-content:space-between; margin-bottom:12px; }
+  .kicker { color:#b8a9ff; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; }
+  .grade2 { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr); gap:14px; align-items:start; }
+  @media (max-width: 900px) { .grade2 { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--borda); border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+  .card h2 { font-size:.95rem; margin:0 0 8px; display:flex; align-items:center; gap:8px; }
+  .passo { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#1b2540; font-size:.75rem; }
+  .feito .passo { background:var(--ok); color:#04130c; }
+  label { color:var(--fraco); }
+  input[type=text] { background:#101a30; color:var(--txt); border:1px solid var(--borda); border-radius:7px; padding:7px 9px; font:inherit; width:9em; }
+  button { background:rgba(255,255,255,.08); color:#dfe9f6; border:1px solid rgba(255,255,255,.18); border-radius:7px; padding:7px 11px; cursor:pointer; font:inherit; }
+  button.forte { background:var(--roxo); border-color:var(--roxo); color:#fff; font-weight:700; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .linha { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .fraco { color:var(--fraco); font-size:.85rem; }
+  .url { font-family:ui-monospace,Consolas,monospace; background:#101a30; border:1px solid var(--borda); border-radius:6px; padding:4px 8px; user-select:all; }
+  .ponto { width:10px; height:10px; border-radius:50%; display:inline-block; background:var(--erro); }
+  .ponto.ok { background:var(--ok); }
+  .ponto.meio { background:var(--alerta); }
+  table.ssq { width:100%; border-collapse:collapse; font-size:.85rem; }
+  table.ssq td, table.ssq th { padding:3px 6px; border-bottom:1px solid rgba(255,255,255,.06); }
+  table.ssq th { color:var(--fraco); font-weight:600; text-align:center; }
+  table.ssq td:first-child { width:52%; }
+  table.ssq td.op { text-align:center; }
+  .en { color:#6f82a6; font-size:.75rem; }
+  .tarefa { border:1px solid var(--borda); border-radius:8px; padding:8px 10px; margin:6px 0; }
+  .tarefa.ativa { border-color:var(--roxo); background:#141434; }
+  .tarefa .opcoes { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .resultado { font-weight:700; }
+  .aviso { color:var(--alerta); font-size:.82rem; margin:4px 0; }
+  .vivo div { display:flex; justify-content:space-between; gap:10px; padding:2px 0; border-bottom:1px dashed rgba(255,255,255,.06); }
+  .vivo span:last-child { font-variant-numeric:tabular-nums; text-align:right; }
+  .registro { max-height:260px; overflow:auto; font-family:ui-monospace,Consolas,monospace; font-size:.75rem; color:#b9c7e0; }
+  .registro div { padding:2px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+  .cronometro { font-variant-numeric:tabular-nums; font-weight:700; }
+  .escores { font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topo">
+    <div>
+      <span class="kicker">Camadas retóricas visíveis · estudo com usuários</span>
+      <h1>Estação do pesquisador</h1>
+    </div>
+    <div class="linha">
+      <label for="pid">Participante</label>
+      <input id="pid" type="text" placeholder="P01" maxlength="32" autocomplete="off" />
+      <label><input type="radio" name="cond" value="webxr" checked /> Imersiva (Quest)</label>
+      <label><input type="radio" name="cond" value="2d" /> 2D</label>
+      <button id="btnNova" type="button" title="Limpa a tela para o próximo participante">Novo participante</button>
+    </div>
+  </div>
+
+  <div class="grade2">
+    <div>
+      <div class="card" id="cardAbrir">
+        <h2><span class="passo">0</span> Abrir a página do participante</h2>
+        <div id="abrirTexto" class="fraco">Digite o código do participante (letras, números, - ou _).</div>
+      </div>
+
+      <div class="card" id="cardTriagem">
+        <h2><span class="passo">1</span> Triagem e consentimento</h2>
+        <div class="linha">
+          <label><input type="checkbox" id="chkTriagem" /> TCLE assinado e triagem do protocolo feita: participante apto</label>
+          <button id="btnTriagem" type="button">Registrar</button>
+        </div>
+        <p class="fraco">Os critérios de exclusão ficam no roteiro (PILOTO-ROTEIRO.md); aqui só se registra que a triagem foi feita, sem detalhes de saúde.</p>
+      </div>
+
+      <div class="card" id="cardSsqPre">
+        <h2><span class="passo">2</span> SSQ antes</h2>
+        <div id="ssqPre"></div>
+      </div>
+
+      <div class="card" id="cardTreino">
+        <h2><span class="passo">3</span> Treino (só na imersiva)</h2>
+        <div class="linha">
+          <button id="btnTreino" type="button" class="forte">Iniciar treino</button>
+          <button id="btnTreinoFim" type="button">Encerrar treino</button>
+          <span id="treinoEstado" class="fraco">—</span>
+        </div>
+        <p class="fraco">Sala sem dados, três gestos: beliscar um alvo, teleportar por um disco, dar um passo real até a marca. Ao terminar, a pessoa volta para a porta.</p>
+      </div>
+
+      <div class="card" id="cardExplorar">
+        <h2><span class="passo">4</span> Exploração livre</h2>
+        <div class="linha">
+          <button id="btnExpIni" type="button" class="forte">Marcar início</button>
+          <button id="btnExpFim" type="button">Marcar fim</button>
+          <span class="cronometro" id="expCrono">00:00</span>
+        </div>
+      </div>
+
+      <div class="card" id="cardTarefas">
+        <h2><span class="passo">5</span> Tarefas</h2>
+        <div id="avisosTarefas"></div>
+        <div id="tarefas"></div>
+        <p class="fraco">"Iniciar" mostra a pergunta para o participante (legenda no headset / faixa no topo da página 2D) e começa o cronômetro. Clique na opção que ele disser em voz alta.</p>
+      </div>
+
+      <div class="card" id="cardSsqPos">
+        <h2><span class="passo">6</span> SSQ depois</h2>
+        <div id="ssqPos"></div>
+      </div>
+
+      <div class="card" id="cardFim">
+        <h2><span class="passo">7</span> Encerrar</h2>
+        <div class="linha">
+          <button id="btnPorta" type="button">Levar à porta (imersiva)</button>
+          <input id="txtMsg" type="text" placeholder="Mensagem curta para o participante" style="width:20em" maxlength="120" />
+          <button id="btnMsg" type="button">Enviar</button>
+        </div>
+        <div class="linha" style="margin-top:8px">
+          <input id="txtInterrupcao" type="text" placeholder="Motivo (ex.: enjoo, pediu para parar)" style="width:20em" maxlength="80" />
+          <button id="btnInterromper" type="button">Registrar interrupção</button>
+        </div>
+        <div class="linha" style="margin-top:8px">
+          <a id="lnkDados" class="url" href="#" download>Baixar dados deste participante (.jsonl)</a>
+          <span class="fraco" id="pastaDados"></span>
+        </div>
+      </div>
+    </div>
+
+    <div style="position:sticky;top:12px">
+      <div class="card">
+        <h2>Ao vivo</h2>
+        <div class="vivo" id="vivo"><div><span>Servidor</span><span>conectando…</span></div></div>
+      </div>
+      <div class="card">
+        <h2>Registrado nesta tela</h2>
+        <div class="registro" id="registro"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="estudo/ssq.js"></script>
+<script src="js-ambiente/07-tarefas.js"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const ID_OK = /^[A-Za-z0-9_-]{1,32}$/;
+  const sessao = Math.random().toString(36).slice(2, 10);
+  let DADOS = null;
+  let pacote = null;
+  let estado = null; // ultimo /api/estudo/estado
+
+  // ---- participante e condicao --------------------------------------------
+  const participante = () => ($("pid").value || "").trim();
+  const condicao = () => document.querySelector('input[name="cond"]:checked').value;
+  const pronto = () => ID_OK.test(participante());
+
+  // Progresso por participante (conveniencia desta tela; a fonte da verdade
+  // e o .jsonl no servidor).
+  const CHAVE = "vrlab.estacao.v1";
+  function lerProgresso() {
+    try { return JSON.parse(localStorage.getItem(CHAVE)) || {}; } catch (e) { return {}; }
+  }
+  function salvarProgresso(p) {
+    try { localStorage.setItem(CHAVE, JSON.stringify(p)); } catch (e) { /* sem armazenamento */ }
+  }
+  let progresso = lerProgresso();
+  const prog = () => {
+    const p = participante() + "|" + condicao();
+    if (!progresso[p]) progresso[p] = { feitos: {}, tarefas: {} };
+    return progresso[p];
+  };
+  function marcarFeito(passo) {
+    prog().feitos[passo] = Date.now();
+    salvarProgresso(progresso);
+    pintarFeitos();
+  }
+  function pintarFeitos() {
+    const f = pronto() ? prog().feitos : {};
+    [["cardTriagem", "triagem"], ["cardSsqPre", "ssq-pre"], ["cardTreino", "treino"], ["cardExplorar", "exploracao"], ["cardTarefas", "tarefas"], ["cardSsqPos", "ssq-pos"]].forEach(([id, k]) =>
+      $(id).classList.toggle("feito", !!f[k])
+    );
+  }
+
+  // ---- registro (vai para o .jsonl do participante) ------------------------
+  const t0 = performance.now();
+  async function registrar(tipo, dados) {
+    if (!pronto()) { alert("Digite o código do participante primeiro."); return false; }
+    const ev = Object.assign({ t: Math.round(performance.now() - t0), ts: Date.now(), tipo }, dados || {});
+    try {
+      const r = await fetch("api/estudo/eventos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participante: participante(), sessao, condicao: condicao(), origem: "pesquisador", eventos: [ev] }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      linhaRegistro(`${new Date().toLocaleTimeString()}  ${tipo}  ${JSON.stringify(dados || {})}`);
+      return true;
+    } catch (e) {
+      linhaRegistro(`FALHOU (${e.message}): ${tipo} - o servidor esta rodando? (node server.js --quest)`, true);
+      alert("Não consegui gravar no servidor. Confira se o node server.js está rodando neste notebook.");
+      return false;
+    }
+  }
+  function linhaRegistro(texto, erro) {
+    const d = document.createElement("div");
+    d.textContent = texto;
+    if (erro) d.style.color = "var(--erro)";
+    $("registro").prepend(d);
+  }
+
+  async function comando(c) {
+    if (!pronto()) { alert("Digite o código do participante primeiro."); return 0; }
+    try {
+      const r = await fetch("api/estudo/comandos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participante: participante(), condicao: condicao(), comando: c }),
+      });
+      const j = await r.json();
+      linhaRegistro(`${new Date().toLocaleTimeString()}  comando ${c.tipo}${c.id ? " " + c.id : ""} -> ${j.entregues || 0} tela(s)`, !j.entregues);
+      return j.entregues || 0;
+    } catch (e) {
+      linhaRegistro("FALHOU comando " + c.tipo, true);
+      return 0;
+    }
+  }
+
+  // ---- SSQ -------------------------------------------------------------------
+  function montarSSQ(alvo, momento) {
+    const box = $(alvo);
+    let h = '<table class="ssq"><tr><th></th>' + SSQ_ESCALA.map((e, i) => `<th>${i}<br><span class="en">${e}</span></th>`).join("") + "</tr>";
+    SSQ_ITENS.forEach((it) => {
+      h += `<tr><td>${it.n}. ${it.pt} <span class="en">(${it.en})</span></td>`;
+      for (let v = 0; v < 4; v += 1) h += `<td class="op"><input type="radio" name="${momento}-${it.n}" value="${v}" aria-label="${it.pt}: ${SSQ_ESCALA[v]}"></td>`;
+      h += "</tr>";
+    });
+    h += `</table><div class="linha" style="margin-top:8px"><button type="button" class="forte" id="${momento}Salvar">Salvar SSQ ${momento === "pre" ? "antes" : "depois"}</button><span class="escores" id="${momento}Escores"></span></div>`;
+    box.innerHTML = h;
+    $(`${momento}Salvar`).addEventListener("click", async () => {
+      const respostas = {};
+      SSQ_ITENS.forEach((it) => {
+        const m = box.querySelector(`input[name="${momento}-${it.n}"]:checked`);
+        if (m) respostas[it.n] = Number(m.value);
+      });
+      const esc = pontuarSSQ(respostas);
+      if (!esc.completo) {
+        $(`${momento}Escores`).textContent = `Faltam os itens ${esc.faltando.join(", ")}.`;
+        return;
+      }
+      if (await registrar("ssq", { momento, respostas, escores: { N: esc.N, O: esc.O, D: esc.D, TS: esc.TS } })) {
+        $(`${momento}Escores`).textContent = `N ${esc.N} · O ${esc.O} · D ${esc.D} · Total ${esc.TS}`;
+        marcarFeito(`ssq-${momento}`);
+      }
+    });
+  }
+  function limparSSQ() {
+    document.querySelectorAll('table.ssq input[type="radio"]').forEach((r) => (r.checked = false));
+    $("preEscores").textContent = "";
+    $("posEscores").textContent = "";
+  }
+
+  // ---- tarefas ---------------------------------------------------------------
+  let ativa = null; // { t, inicio }
+  function montarTarefas() {
+    $("avisosTarefas").innerHTML = pacote.avisos.map((a) => `<p class="aviso">${a}</p>`).join("");
+    $("tarefas").innerHTML = "";
+    pacote.lista.forEach((t, i) => {
+      const box = document.createElement("div");
+      box.className = "tarefa";
+      box.id = "tarefa-" + t.id;
+      box.innerHTML =
+        `<div class="linha"><strong>${t.id}</strong><span>${t.pergunta}</span></div>` +
+        `<div class="linha" style="margin-top:6px"><button type="button" class="forte" data-iniciar="${t.id}">Iniciar ${t.id}</button>` +
+        `<span class="cronometro" id="crono-${t.id}"></span><span class="resultado" id="res-${t.id}"></span></div>` +
+        `<div class="opcoes" id="op-${t.id}" hidden></div>`;
+      const op = box.querySelector(`#op-${t.id}`);
+      t.opcoes.forEach((o) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = o;
+        b.addEventListener("click", () => responder(t, o));
+        op.appendChild(b);
+      });
+      const nao = document.createElement("button");
+      nao.type = "button";
+      nao.textContent = "não respondeu";
+      nao.addEventListener("click", () => responder(t, null));
+      op.appendChild(nao);
+      box.querySelector("[data-iniciar]").addEventListener("click", () => iniciarTarefa(t));
+      $("tarefas").appendChild(box);
+      void i;
+    });
+    pintarTarefas();
+  }
+  function pintarTarefas() {
+    if (!pacote) return;
+    const feitas = pronto() ? prog().tarefas : {};
+    pacote.lista.forEach((t) => {
+      const r = feitas[t.id];
+      $("res-" + t.id).textContent = r ? (r.resposta == null ? "sem resposta" : `${r.resposta} · ${r.correta ? "correta" : "errada"} · ${(r.tempoMs / 1000).toFixed(1)} s`) : "";
+      $("res-" + t.id).style.color = r ? (r.correta ? "var(--ok)" : "var(--alerta)") : "";
+    });
+  }
+  async function iniciarTarefa(t) {
+    if (!pronto()) { alert("Digite o código do participante primeiro."); return; }
+    if (ativa) await responder(ativa.t, null, "interrompida");
+    const entregues = await comando({ tipo: "tarefa-iniciar", id: t.id });
+    if (!entregues && !confirm("Nenhuma tela do participante recebeu a pergunta (página fechada ou sem ?estudo=1&p=...). Cronometrar mesmo assim?")) return;
+    ativa = { t, inicio: performance.now() };
+    await registrar("tarefa", { id: t.id, evento: "inicio", origem: "estacao", exibidaEm: entregues });
+    document.querySelectorAll(".tarefa").forEach((b) => b.classList.toggle("ativa", b.id === "tarefa-" + t.id));
+    $("op-" + t.id).hidden = false;
+  }
+  async function responder(t, resposta, motivo) {
+    if (!ativa || ativa.t.id !== t.id) return;
+    const tempoMs = Math.round(performance.now() - ativa.inicio);
+    const r = resposta == null ? { correta: false, corretaEstrita: false } : corrigirResposta(t, resposta);
+    ativa = null;
+    $("op-" + t.id).hidden = true;
+    $("crono-" + t.id).textContent = "";
+    document.querySelectorAll(".tarefa").forEach((b) => b.classList.remove("ativa"));
+    await registrar("tarefa", { id: t.id, evento: "resposta", resposta, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs, origem: "estacao", motivo: motivo || null });
+    await comando({ tipo: "tarefa-encerrar", id: t.id });
+    prog().tarefas[t.id] = { resposta, correta: r.correta, tempoMs };
+    if (Object.keys(prog().tarefas).length >= pacote.lista.length) marcarFeito("tarefas");
+    salvarProgresso(progresso);
+    pintarTarefas();
+  }
+
+  // ---- cronometros -----------------------------------------------------------
+  const mmss = (ms) => {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  };
+  setInterval(() => {
+    if (ativa) $("crono-" + ativa.t.id).textContent = mmss(performance.now() - ativa.inicio);
+    const ex = pronto() ? prog().exploracao : null;
+    if (ex && ex.inicio && !ex.fim) $("expCrono").textContent = mmss(Date.now() - ex.inicio);
+    else if (ex && ex.inicio && ex.fim) $("expCrono").textContent = mmss(ex.fim - ex.inicio);
+    else $("expCrono").textContent = "00:00";
+  }, 250);
+
+  // ---- ao vivo ---------------------------------------------------------------
+  async function atualizarEstado() {
+    try {
+      const r = await fetch("api/estudo/estado", { cache: "no-store" });
+      estado = await r.json();
+      if (r.status === 403) estado = { proibido: true };
+    } catch (e) {
+      estado = null;
+    }
+    pintarVivo();
+    pintarAbrir();
+  }
+  function pintarVivo() {
+    const linhas = [];
+    if (estado && estado.proibido) {
+      $("vivo").innerHTML = '<div><span>Endereço errado</span><span style="color:var(--erro)">abra esta página por http://127.0.0.1:4173/pesquisador.html - só o próprio notebook conduz a sessão</span></div>';
+      return;
+    }
+    if (!estado || !estado.ok) {
+      $("vivo").innerHTML = '<div><span>Servidor</span><span style="color:var(--erro)">sem resposta - rode node server.js --quest</span></div>';
+      return;
+    }
+    const p = pronto() ? estado.participantes[participante()] : null;
+    const conectados = p ? p.conectados.filter((c) => c.condicao === condicao()) : [];
+    const r = p && p.resumo;
+    const idade = r && r.ultimo ? Math.round((estado.agora - r.ultimo) / 1000) : null;
+    const ponto = (cls) => `<i class="ponto ${cls}"></i> `;
+    linhas.push(["Tela do participante", conectados.length ? ponto("ok") + `conectada (${conectados.length})` : ponto("") + "não conectada"]);
+    linhas.push(["Último dado recebido", idade == null ? "—" : (idade > 10 ? ponto("meio") : ponto("ok")) + `há ${idade} s`]);
+    linhas.push(["Eventos gravados", r ? r.eventos : 0]);
+    if (condicao() === "webxr") {
+      linhas.push(["Quadros por segundo", r && r.fps != null ? r.fps : "—"]);
+      linhas.push(["Em VR", r && r.pos ? (r.pos.vr ? "sim" : "não") : "—"]);
+      linhas.push(["Olhando para", r && r.pos && r.pos.alvo ? r.pos.alvo : "—"]);
+      linhas.push(["Perdas de rastreio da mão", r ? r.perdasRastreio : 0]);
+      linhas.push(["Pinças sem alvo", r ? r.pincasNoVazio : 0]);
+      linhas.push(["Treino", r && r.treino ? `${r.treino.evento}${r.treino.etapa ? " · " + r.treino.etapa : ""}${r.treino.concluido ? " · concluído" : ""}` : "—"]);
+    } else {
+      linhas.push(["Seção visível", r && r.pos && r.pos.secao ? r.pos.secao : "—"]);
+    }
+    $("vivo").innerHTML = linhas.map(([a, b]) => `<div><span>${a}</span><span>${b}</span></div>`).join("");
+    if (r && r.treino && r.treino.evento === "fim" && r.treino.concluido && !prog().feitos.treino) marcarFeito("treino");
+    $("treinoEstado").textContent = r && r.treino ? `${r.treino.evento}${r.treino.etapa ? " · " + r.treino.etapa : ""}` : "—";
+    $("pastaDados").textContent = estado.pastaDados ? "pasta: " + estado.pastaDados : "";
+  }
+  function pintarAbrir() {
+    const box = $("abrirTexto");
+    if (!pronto()) {
+      box.textContent = "Digite o código do participante (letras, números, - ou _).";
+      return;
+    }
+    const p = encodeURIComponent(participante());
+    const ips = (estado && estado.ips) || [];
+    const https = (estado && estado.portaHttps) || 4443;
+    const httpPorta = (estado && estado.portaHttp) || 4173;
+    if (condicao() === "webxr") {
+      const urls = ips.length ? ips.map((ip) => `https://${ip}:${https}/?estudo=1&p=${p}`) : [`https://<ip-deste-pc>:${https}/?estudo=1&p=${p}`];
+      box.innerHTML = "No navegador do Quest, abra:<br>" + urls.map((u) => `<span class="url">${u}</span>`).join("<br>") +
+        '<br><span class="fraco">(o servidor precisa estar em modo --quest; se houver mais de um endereço, use o da rede Wi-Fi)</span>';
+    } else {
+      box.innerHTML = `Na tela do participante, abra:<br><span class="url">http://127.0.0.1:${httpPorta}/controle-2d.html?estudo=1&amp;p=${p}</span>` +
+        (ips.length ? `<br><span class="fraco">ou, de outro computador: </span><span class="url">https://${ips[0]}:${https}/controle-2d.html?estudo=1&amp;p=${p}</span>` : "");
+    }
+    $("lnkDados").href = `api/estudo/arquivo?p=${p}`;
+  }
+
+  // ---- botoes ----------------------------------------------------------------
+  $("btnTriagem").addEventListener("click", async () => {
+    if (!$("chkTriagem").checked) { alert("Marque a caixa só depois do TCLE e da triagem."); return; }
+    if (await registrar("triagem", { apto: true })) marcarFeito("triagem");
+  });
+  $("btnTreino").addEventListener("click", () => {
+    if (condicao() !== "webxr") { alert("O treino existe só na condição imersiva."); return; }
+    comando({ tipo: "treino-iniciar" });
+  });
+  $("btnTreinoFim").addEventListener("click", () => comando({ tipo: "treino-encerrar" }));
+  $("btnExpIni").addEventListener("click", async () => {
+    if (await registrar("fase", { fase: "exploracao", evento: "inicio" })) {
+      prog().exploracao = { inicio: Date.now() };
+      salvarProgresso(progresso);
+    }
+  });
+  $("btnExpFim").addEventListener("click", async () => {
+    const ex = prog().exploracao;
+    if (!ex || !ex.inicio) { alert("Marque o início primeiro."); return; }
+    if (await registrar("fase", { fase: "exploracao", evento: "fim", ms: Date.now() - ex.inicio })) {
+      ex.fim = Date.now();
+      marcarFeito("exploracao");
+    }
+  });
+  $("btnPorta").addEventListener("click", () => comando({ tipo: "ir-entrada" }));
+  $("btnInterromper").addEventListener("click", async () => {
+    const motivo = $("txtInterrupcao").value.trim() || "nao informado";
+    if (ativa) await responder(ativa.t, null, "interrompida");
+    if (await registrar("interrupcao", { motivo })) $("txtInterrupcao").value = "";
+  });
+  $("btnMsg").addEventListener("click", () => {
+    const texto = $("txtMsg").value.trim();
+    if (!texto) return;
+    comando({ tipo: "mensagem", texto, ms: 8000 });
+    $("txtMsg").value = "";
+  });
+  $("btnNova").addEventListener("click", () => {
+    if (ativa && !confirm("Há uma tarefa em andamento. Limpar mesmo assim?")) return;
+    ativa = null;
+    $("pid").value = "";
+    $("chkTriagem").checked = false;
+    limparSSQ();
+    pintarFeitos();
+    pintarTarefas();
+    atualizarEstado();
+    $("pid").focus();
+  });
+  const aoTrocar = () => {
+    pintarFeitos();
+    pintarTarefas();
+    atualizarEstado();
+    try { localStorage.setItem(CHAVE + ".ultimo", JSON.stringify({ p: participante(), c: condicao() })); } catch (e) { /* ignora */ }
+  };
+  $("pid").addEventListener("input", aoTrocar);
+  document.querySelectorAll('input[name="cond"]').forEach((r) => r.addEventListener("change", aoTrocar));
+
+  // ---- boot ------------------------------------------------------------------
+  try {
+    const u = JSON.parse(localStorage.getItem(CHAVE + ".ultimo"));
+    if (u && ID_OK.test(u.p || "")) {
+      $("pid").value = u.p;
+      const r = document.querySelector(`input[name="cond"][value="${u.c}"]`);
+      if (r) r.checked = true;
+    }
+  } catch (e) { /* primeira vez */ }
+  montarSSQ("ssqPre", "pre");
+  montarSSQ("ssqPos", "pos");
+  fetch("dados.json").then((r) => r.json()).then((d) => {
+    DADOS = d;
+    pacote = gerarTarefas(DADOS);
+    montarTarefas();
+  });
+  pintarFeitos();
+  atualizarEstado();
+  setInterval(atualizarEstado, 1000);
+  window.ESTACAO = { registrar, comando, iniciarTarefa: (id) => iniciarTarefa(pacote.lista.find((t) => t.id === id)), responder: (id, r) => responder(pacote.lista.find((t) => t.id === id), r) };
+})();
+</script>
+</body>
+</html>

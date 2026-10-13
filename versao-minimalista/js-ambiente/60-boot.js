@@ -84,7 +84,7 @@ function initExperience() {
 
   state.pronto = true;
   hideLoading();
-  tlog("boot", { ambiente: "planta-camadas-retoricas" });
+  tlog("boot", { ambiente: "planta-camadas-retoricas", dados: DADOS.meta ? DADOS.meta.gerado : null });
 }
 
 function hideLoading() {

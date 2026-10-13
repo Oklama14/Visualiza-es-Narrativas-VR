@@ -127,6 +127,7 @@ function confirmarEntrada(origem, inputSource) {
 function descreverAlvo(e) {
   if (!e || !e.dataset) return null;
   const d = e.dataset;
+  if (d.treino) return `treino:${d.treino}`;
   if (d.regiao) return `regiao:${d.regiao}`;
   if (d.indicador) return `indicador:${d.indicador}`;
   if (d.ano != null) return `ano:${d.ano}`;
@@ -148,6 +149,12 @@ function pulsoHaptico(inputSource) {
 function confirmar(alvo) {
   const e = alvo || hoverEl;
   if (!e || state.transitioning) return;
+
+  // Alvos do treino (85-treino.js): so existem com o treino em andamento.
+  if (e.dataset.treino) {
+    treinoConfirmar(e);
+    return;
+  }
 
   if (e.dataset.regiao) {
     abrirPainel(e.dataset.regiao);

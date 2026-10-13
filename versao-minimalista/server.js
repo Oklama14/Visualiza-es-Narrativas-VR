@@ -15,6 +15,16 @@
 // Alternativa sem aviso de certificado: cabo USB + modo desenvolvedor,
 //   adb reverse tcp:4173 tcp:4173
 // e abrir http://localhost:4173/ no Quest (localhost conta como seguro).
+//
+// ESTUDO COM USUARIOS (api/estudo/*): este mesmo servidor e o "gravador" da
+// sessao. A pagina do participante (?estudo=1&p=P01) manda a telemetria por
+// POST e recebe os comandos do pesquisador por Server-Sent Events; a estacao
+// do pesquisador (pesquisador.html, aberta NESTE notebook) conduz a sessao. Os
+// dados vao para dados-estudo/<participante>.jsonl (uma linha por evento) -
+// pasta que nunca e servida e esta no .gitignore. Comandos, estado e download
+// dos dados so respondem a pedidos do proprio notebook (127.0.0.1).
+// Para gravar noutro lugar (PowerShell):
+//   $env:VRLAB_DADOS_DIR='D:\estudo'; node server.js --quest
 const http = require("http");
 const https = require("https");
 const fs = require("fs");
@@ -29,6 +39,7 @@ const PORT = Number(portaArg) || 4173;
 const PORT_HTTPS = 4443;
 const HOST = MODO_QUEST ? "0.0.0.0" : "127.0.0.1";
 const DIR_CERTS = path.join(ROOT, ".certs");
+const DIR_DADOS = process.env.VRLAB_DADOS_DIR ? path.resolve(process.env.VRLAB_DADOS_DIR) : path.join(ROOT, "dados-estudo");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -58,6 +69,19 @@ function atender(req, res) {
     // Ignora a query string (ex.: app.js?v=8) e decodifica %20 etc.
     let pathname = decodeURIComponent(req.url.split("?")[0]);
     if (pathname === "/") pathname = "/index.html";
+
+    if (pathname.startsWith("/api/")) {
+      api(req, res).catch((e) => responderJson(res, e.codigo || 500, { ok: false, erro: e.message }));
+      return;
+    }
+
+    // Os dados dos participantes nunca saem como arquivo estatico (nem para
+    // quem esta no Wi-Fi do laboratorio): so pela api, e so no notebook.
+    if (pathname.split(/[\\/]/).some((seg) => seg === "dados-estudo")) {
+      res.writeHead(403);
+      res.end("403 Forbidden");
+      return;
+    }
 
     // Nada que comece com ponto (.certs, .git...) sai daqui: no modo --quest
     // o servidor esta na rede, e a chave do certificado mora em .certs/.
@@ -104,6 +128,236 @@ function atender(req, res) {
     res.writeHead(500);
     res.end("500 " + e.message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// API do estudo
+// ---------------------------------------------------------------------------
+
+const ID_OK = /^[A-Za-z0-9_-]{1,32}$/;
+const LIMITE_CORPO = 2 * 1024 * 1024;
+const CONDICOES = ["webxr", "2d"];
+const COMANDOS = ["tarefa-iniciar", "tarefa-encerrar", "treino-iniciar", "treino-encerrar", "mensagem", "ir-entrada"];
+
+// Estado em memoria (o arquivo .jsonl e a fonte da verdade; isto so alimenta
+// a tela da estacao do pesquisador).
+const estudo = { clientes: new Map(), resumo: new Map() };
+
+function ehLocal(req) {
+  const a = (req.socket && req.socket.remoteAddress) || "";
+  return a === "127.0.0.1" || a === "::1" || a === "::ffff:127.0.0.1";
+}
+
+function responderJson(res, codigo, obj) {
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+  res.writeHead(codigo, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(JSON.stringify(obj));
+}
+
+function lerCorpo(req) {
+  return new Promise((resolve, reject) => {
+    let total = 0;
+    const partes = [];
+    req.on("data", (c) => {
+      total += c.length;
+      if (total > LIMITE_CORPO) {
+        reject(Object.assign(new Error("corpo grande demais"), { codigo: 413 }));
+        req.destroy();
+        return;
+      }
+      partes.push(c);
+    });
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(partes).toString("utf8") || "{}"));
+      } catch (e) {
+        reject(Object.assign(new Error("JSON invalido"), { codigo: 400 }));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function arquivoDe(participante) {
+  return path.join(DIR_DADOS, `${participante}.jsonl`);
+}
+
+function gravar(participante, linhas) {
+  if (!linhas.length) return;
+  fs.mkdirSync(DIR_DADOS, { recursive: true });
+  fs.appendFileSync(arquivoDe(participante), linhas.map((l) => JSON.stringify(l)).join("\n") + "\n");
+}
+
+function resumoDe(p) {
+  if (!estudo.resumo.has(p)) {
+    estudo.resumo.set(p, { eventos: 0, ultimo: null, recentes: [], pos: null, fps: null, perdasRastreio: 0, pincasNoVazio: 0, treino: null, conexao: null });
+  }
+  return estudo.resumo.get(p);
+}
+
+// Guarda o que a estacao precisa mostrar "ao vivo".
+function lembrar(p, linhas) {
+  const r = resumoDe(p);
+  linhas.forEach((ev) => {
+    r.eventos += 1;
+    r.ultimo = ev.recebido;
+    if (ev.tipo === "pos") {
+      r.pos = { x: ev.x, z: ev.z, guinada: ev.guinada, vr: ev.vr, alvo: ev.alvo };
+      if (ev.fps != null) r.fps = ev.fps;
+      return;
+    }
+    if (ev.tipo === "rolagem") {
+      r.pos = { secao: ev.secao, y: ev.y };
+      return;
+    }
+    if (ev.tipo === "rastreio" && ev.estado === "perdido") r.perdasRastreio += 1;
+    if ((ev.tipo === "pinca" || ev.tipo === "gatilho") && !ev.alvo) r.pincasNoVazio += 1;
+    if (ev.tipo === "treino") r.treino = { evento: ev.evento, etapa: ev.etapa || null, concluido: ev.concluido };
+    if (ev.tipo === "conexao") r.conexao = ev.estado;
+    r.recentes.push({ recebido: ev.recebido, origem: ev.origem, tipo: ev.tipo, resumo: resumirEvento(ev) });
+    if (r.recentes.length > 40) r.recentes.shift();
+  });
+}
+
+function resumirEvento(ev) {
+  const fora = ["t", "ts", "tipo", "participante", "sessao", "condicao", "origem", "recebido", "ua"];
+  return Object.keys(ev)
+    .filter((k) => fora.indexOf(k) < 0 && ev[k] !== undefined)
+    .map((k) => `${k}=${typeof ev[k] === "object" ? JSON.stringify(ev[k]) : ev[k]}`)
+    .join(" ")
+    .slice(0, 160);
+}
+
+function clientesDe(p) {
+  if (!estudo.clientes.has(p)) estudo.clientes.set(p, new Set());
+  return estudo.clientes.get(p);
+}
+
+async function api(req, res) {
+  const url = new URL(req.url, "http://servidor");
+  const rota = url.pathname;
+
+  // Telemetria do participante (headset ou pagina 2D) e registros da estacao.
+  if (rota === "/api/estudo/eventos" && req.method === "POST") {
+    const c = await lerCorpo(req);
+    const origem = c.origem === "pesquisador" ? "pesquisador" : "participante";
+    if (origem === "pesquisador" && !ehLocal(req)) return responderJson(res, 403, { ok: false, erro: "registro do pesquisador so pelo notebook" });
+    const participante = ID_OK.test(c.participante || "") ? c.participante : "sem-id";
+    const sessao = ID_OK.test(c.sessao || "") ? c.sessao : null;
+    const condicao = CONDICOES.indexOf(c.condicao) >= 0 ? c.condicao : "desconhecida";
+    const recebido = Date.now();
+    const eventos = Array.isArray(c.eventos) ? c.eventos.slice(0, 5000) : [];
+    // Os campos de identificacao sao do SERVIDOR: um evento nao consegue
+    // se passar por outro participante.
+    const linhas = eventos
+      .filter((e) => e && typeof e === "object" && typeof e.tipo === "string")
+      .map((e) => Object.assign({}, e, { participante, sessao, condicao, origem, recebido, reenvio: c.reenvio ? true : undefined }));
+    gravar(participante, linhas);
+    lembrar(participante, linhas);
+    return responderJson(res, 200, { ok: true, gravados: linhas.length });
+  }
+
+  // Canal de comandos: a pagina do participante fica ouvindo (SSE).
+  if (rota === "/api/estudo/comandos" && req.method === "GET") {
+    const p = url.searchParams.get("p") || "";
+    if (!ID_OK.test(p)) return responderJson(res, 400, { ok: false, erro: "participante invalido" });
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write("retry: 2000\n\n");
+    const cliente = {
+      res,
+      sessao: (url.searchParams.get("sessao") || "").slice(0, 32),
+      condicao: CONDICOES.indexOf(url.searchParams.get("condicao")) >= 0 ? url.searchParams.get("condicao") : "desconhecida",
+      desde: Date.now(),
+    };
+    clientesDe(p).add(cliente);
+    const batimento = setInterval(() => res.write(": ping\n\n"), 15000);
+    req.on("close", () => {
+      clearInterval(batimento);
+      clientesDe(p).delete(cliente);
+    });
+    return undefined;
+  }
+
+  // Daqui para baixo: so a estacao do pesquisador (o proprio notebook).
+  if (!ehLocal(req)) return responderJson(res, 403, { ok: false, erro: "so pelo notebook do pesquisador" });
+
+  if (rota === "/api/estudo/comandos" && req.method === "POST") {
+    const c = await lerCorpo(req);
+    const p = c.participante || "";
+    const cmd = c.comando || {};
+    if (!ID_OK.test(p)) return responderJson(res, 400, { ok: false, erro: "participante invalido" });
+    if (COMANDOS.indexOf(cmd.tipo) < 0) return responderJson(res, 400, { ok: false, erro: "comando desconhecido" });
+    const msg = {
+      tipo: cmd.tipo,
+      id: typeof cmd.id === "string" ? cmd.id.slice(0, 8) : undefined,
+      texto: typeof cmd.texto === "string" ? cmd.texto.slice(0, 120) : undefined,
+      ms: Number(cmd.ms) || undefined,
+      cid: crypto.randomBytes(4).toString("hex"),
+    };
+    let entregues = 0;
+    clientesDe(p).forEach((cli) => {
+      if (c.condicao && cli.condicao !== c.condicao) return;
+      cli.res.write(`data: ${JSON.stringify(msg)}\n\n`);
+      entregues += 1;
+    });
+    const linha = Object.assign({ t: null, ts: Date.now(), tipo: "comando-enviado", comando: msg.tipo, entregues }, msg, {
+      tipo: "comando-enviado",
+      participante: p,
+      sessao: null,
+      condicao: CONDICOES.indexOf(c.condicao) >= 0 ? c.condicao : "desconhecida",
+      origem: "pesquisador",
+      recebido: Date.now(),
+    });
+    gravar(p, [linha]);
+    lembrar(p, [linha]);
+    return responderJson(res, 200, { ok: true, entregues, cid: msg.cid });
+  }
+
+  if (rota === "/api/estudo/estado" && req.method === "GET") {
+    const nomes = new Set([...estudo.clientes.keys(), ...estudo.resumo.keys()]);
+    const participantes = {};
+    nomes.forEach((p) => {
+      const r = estudo.resumo.get(p) || null;
+      participantes[p] = {
+        conectados: Array.from(clientesDe(p)).map((c) => ({ sessao: c.sessao, condicao: c.condicao, desde: c.desde })),
+        resumo: r,
+        arquivo: fs.existsSync(arquivoDe(p)),
+      };
+    });
+    return responderJson(res, 200, {
+      ok: true,
+      agora: Date.now(),
+      ips: ipsDaRede(),
+      portaHttps: PORT_HTTPS,
+      portaHttp: PORT,
+      pastaDados: DIR_DADOS,
+      participantes,
+    });
+  }
+
+  if (rota === "/api/estudo/arquivo" && req.method === "GET") {
+    const p = url.searchParams.get("p") || "";
+    if (!ID_OK.test(p)) return responderJson(res, 400, { ok: false, erro: "participante invalido" });
+    const arq = arquivoDe(p);
+    if (!fs.existsSync(arq)) return responderJson(res, 404, { ok: false, erro: "sem dados para " + p });
+    res.writeHead(200, {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${p}.jsonl"`,
+      "Cache-Control": "no-store",
+    });
+    fs.createReadStream(arq).pipe(res);
+    return undefined;
+  }
+
+  return responderJson(res, 404, { ok: false, erro: "rota desconhecida" });
 }
 
 // ---------------------------------------------------------------------------
@@ -257,6 +511,8 @@ if (require.main === module) {
     if (!MODO_QUEST) {
       console.log("Servidor rodando em: http://127.0.0.1:" + PORT + "/");
       console.log("Servindo a pasta:    " + ROOT);
+      console.log("Estacao do pesquisador: http://127.0.0.1:" + PORT + "/pesquisador.html");
+      console.log("Dados do estudo em:     " + DIR_DADOS);
       console.log("Para o Quest 2 pela rede:  node server.js --quest");
       console.log("Para parar: Ctrl+C");
       return;
@@ -285,6 +541,9 @@ if (require.main === module) {
         );
       });
       console.log("");
+      console.log("  Estacao do pesquisador (neste PC): http://127.0.0.1:" + PORT + "/pesquisador.html");
+      console.log("  Dados do estudo em: " + DIR_DADOS);
+      console.log("");
       console.log("  1a vez no Quest: 'Sua conexao nao e particular' -> Avancado -> Continuar.");
       console.log("  Se o Quest nao abrir a pagina: libere o Node no Firewall do Windows (rede privada)");
       console.log("  e confira se o Wi-Fi do PC e do Quest e o mesmo.");
@@ -294,4 +553,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { gerarCertificado, atender };
+module.exports = { gerarCertificado, atender, DIR_DADOS };
