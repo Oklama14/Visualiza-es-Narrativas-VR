@@ -54,16 +54,63 @@ no piso. O texto nunca fica por cima do dado — é a tese do desenho.
 
 ## Como rodar
 
+Desktop (este PC):
+
 ```powershell
 cd versao-minimalista
-node server.js            # ou: python -m http.server 4174 --bind 127.0.0.1
+node server.js            # http://127.0.0.1:4173/
 ```
 
-No Quest 2, sirva pela rede e abra o IP da máquina no navegador do headset
-(`http://192.168.x.x:4173/`), toque em **Enter VR** e ative *Hand tracking* nas
-configurações do headset. Os controles Touch continuam funcionando: os dois
-estão declarados, e o A-Frame liga o que estiver em uso — dá para largar os
-controles no meio da sessão.
+### No Meta Quest 2
+
+O WebXR só existe em **contexto seguro** (HTTPS ou localhost). Aberto como
+`http://192.168.x.x:4173` no navegador do Quest, o `navigator.xr` nem aparece e
+o botão VR vira uma tela cheia 2D, sem erro nenhum (a página agora mostra um
+aviso laranja quando isso acontece). Por isso há um modo próprio:
+
+```powershell
+node server.js --quest
+```
+
+Ele escuta na rede, gera um certificado autoassinado em `.certs/` (Node puro,
+sem openssl; a pasta nunca é servida) e imprime o endereço para o headset:
+
+```
+  No Quest 2 abra:    https://192.168.0.12:4443/
+```
+
+1. PC e Quest na **mesma rede Wi-Fi**. Na primeira vez o Windows pergunta se
+   libera o Node no firewall: libere para **redes privadas**.
+2. No navegador do Quest, abra o endereço `https://…:4443/`. Na primeira visita
+   aparece "Sua conexão não é particular" → **Avançado** → **Continuar**.
+3. Toque em **Entrar** no cartão de ajuda e depois no botão **VR** (canto
+   inferior direito).
+4. Mãos: ligue o *rastreamento de mãos* nas configurações do Quest (fica em
+   Movimento ou em Dispositivo, conforme a versão do sistema). Belisque com
+   a **palma virada para fora** — com a palma para você, a mesma pinça abre o
+   menu do sistema. Os controles Touch continuam funcionando (gatilho), e dá para
+   largar os controles no meio da sessão.
+
+Alternativa sem aviso de certificado: cabo USB + modo desenvolvedor,
+`adb reverse tcp:4173 tcp:4173` e abrir `http://localhost:4173/` no Quest.
+
+O servidor manda `Cache-Control: no-store`: o navegador do Quest não reaproveita
+o JS da rodada anterior, então não é preciso subir o `?v=` a cada teste.
+
+#### Perfil de renderização pela URL
+
+Para comparar no headset sem editar código (vale junto com `?estudo=1` etc.):
+
+| parâmetro | efeito | padrão |
+|---|---|---|
+| `?fps=1` | medidor dentro do VR: fps real do headset e draw calls | desligado |
+| `?hz=90` | pede 90 Hz ao Quest (`?hz=72` volta) | 72 Hz |
+| `?aa=0` | desliga o antialias (MSAA 4x) | ligado |
+| `?fov=0` … `?fov=1` | foveação fixa (0 = nenhuma, 1 = máxima) | 0,5 |
+
+Ex.: `https://192.168.0.12:4443/?fps=1&hz=90`. Se o medidor ficar âmbar (abaixo
+do alvo) com 90 Hz, fique nos 72 Hz: quadro perdido no headset é pior que taxa
+menor.
 
 Modo estudo (telemetria + onboarding sempre visível + 3 tarefas de compreensão
 no painel do pesquisador):
@@ -72,13 +119,26 @@ no painel do pesquisador):
 http://127.0.0.1:4173/?estudo=1&p=P01
 ```
 
+O painel do pesquisador e o botão "Exportar sessão" são DOM: aparecem no
+**monitor do PC** quando a cena roda no Chrome do PC com o Quest ligado por
+**Quest Link / Air Link** — é o "monitor espelhado" que os comentários do código
+pressupõem. No navegador do próprio Quest (standalone), eles ficam na página 2D
+do headset, invisíveis durante o VR: a legenda da tarefa não pode ser disparada
+de fora, e a exportação só acontece depois de sair do VR (o arquivo cai nos
+Downloads do Quest).
+
 ## Testes
 
 ```
 node tests/logic-check-ambiente.js   # sem navegador
 node tests/smoke-ambiente.js         # Chromium headless (precisa de playwright)
 node tests/smoke-ambiente.js --shot cena.png
+node tests/quest-sim.js              # Quest 2 emulado (precisa de playwright + iwer)
+node tests/quest-sim.js --shot visao-quest.png
 ```
+
+Para os dois últimos: `npm i -D playwright iwer` uma vez (o `quest-sim` leva
+uns 2 min, o SwiftShader renderiza os dois olhos em software).
 
 O `logic-check` confere a geometria derivada da planta (proporção da sala,
 camadas sem sobreposição, placas cabendo nas regiões, colunas sem tapar o mapa),
@@ -88,7 +148,21 @@ sem `NaN`, as 48 composições anuais somando exatamente 100 blocos, e o contrat
 entre o HTML e o cache `dom`.
 
 O `smoke` sobe a cena de verdade e varre **160 combinações** (5 regiões × 4
-indicadores × 8 anos) exigindo console limpo.
+indicadores × 8 anos) exigindo console limpo — e confere no layout real que
+nenhum rótulo de linha única quebrou (contar caracteres não basta: letra larga
+em caixa alta quebra antes do `wrap-count`).
+
+O `quest-sim` é o teste do headset: com o **IWER** (Immersive Web Emulation
+Runtime, da Meta) configurado como Meta Quest 2 e a internet bloqueada, a cena
+entra numa sessão imersiva de verdade e ele confere: cabeça a 1,6 m; todo alvo
+alcançável pelo olhar a partir da marca de observação (inclusive os que ficam a
+menos de 1 m do olho); **uma pinça = uma confirmação** e **um gatilho = uma
+confirmação**; pinça numa região abre o painel; painel opaco ao olhar e sem
+alvos fantasmas quando fechado; painel virado para o olho; teleporte que leva a
+cabeça ao disco mesmo com o corpo fora do centro; legenda e retículo por cima
+do mundo; antialias e 72 Hz; orçamento de draw calls; modelo da mão carregado
+sem internet e escondido quando a pessoa pega os controles (o A-Frame 1.5 deixava a mão
+congelada no ar); console limpo.
 
 ## Arquivos
 
@@ -99,6 +173,8 @@ js-ambiente/00-planta.js      O DESENHO EM METROS — fonte única da geometria
 js-ambiente/02-base.js        estado, utilitários, fonte e escala de texto
 js-ambiente/03-audio.js       som posicional (leitmotiv, nota do ano, acorde)
 js-ambiente/04-narrativa.js   narrativa e anotações calculadas dos dados
+js-ambiente/05-headset.js     só do Quest: perfil pela URL, retículo, legenda por
+                              cima, mãos locais, medidor de fps, aviso de HTTPS
 js-ambiente/15-sala.js        sala, zonas do piso, placa e posicionamento
 js-ambiente/20-mapa.js        mesa: regiões em voxel + colunas de indicador
 js-ambiente/30-contexto.js    camada textual
@@ -107,6 +183,8 @@ js-ambiente/50-interacao.js   foco por olhar, pinça/gatilho, teleporte
 js-ambiente/60-boot.js        boot, HUD, onboarding, handle window.AMB
 assets/aframe-1.5.0.min.js    A-Frame local (offline)
 assets/poppins-msdf.json/png  fonte MSDF local
+assets/maos/                  modelo das mãos (WebXR Input Profiles, MIT)
+tests/quest-sim.js            simulação do Quest 2 (IWER)
 ```
 
 A pasta `js/` antiga e os `.bak` ficaram no lugar mas **não são mais
@@ -149,10 +227,29 @@ menor valor da série aparecia como "melhor ano". Agora o rótulo segue o
 pior, só maior e menor. Há um check dedicado (`D4b`) para isso não voltar.
 
 **Conforto.** Sem locomoção contínua em VR (o WASD desliga no `enter-vr`);
-teleporte com *blink* pelos discos do piso; painel entre −12° e +26° de elevação
-e 71° de largura a partir da marca de observação, dentro do FOV útil do Quest 2;
-`foveationLevel: 1` e `highRefreshRate` no renderer; lembrete de pausa a cada
-20 min no modo estudo.
+teleporte com *blink* pelos discos do piso, que leva a **cabeça** ao disco e o
+olhar ao alvo (desfaz o quanto a pessoa já andou e girou no guardian); painel
+entre −12° e +26° de elevação e 71° de largura a partir da marca de observação,
+inclinado para o olho; legenda presa ao rosto a ~20° abaixo do centro (mais
+baixo cai fora da região nítida da lente); lembrete de pausa a cada 20 min no
+modo estudo.
+
+**Renderização no Quest 2.** MSAA 4x ligado (sem ele, linha fina e texto
+cintilam), 72 Hz estáveis e foveação 0,5. No A-Frame `foveationLevel: 1` é a
+foveação **máxima**, que borra justamente o texto da periferia do painel.
+Fundos de painel e de anotação são opacos e os alvos de olhar têm material
+invisível (o raycaster acerta, nada é desenhado). O shader MSDF do A-Frame 1.5
+dividia por zero onde o campo de distância é plano, o que deixava pontos em
+volta das letras. Ele ganhou um piso no `fwidth` (`05-headset.js`).
+
+**Olhar e confirmação no headset.** O raio do olhar sai do olho, não de 1 m à
+frente. Antes, nada a menos de 1 m respondia: da marca de observação, a coluna
+de Retenção e o botão de som. O anel vai até o ponto mirado e fica âmbar sobre o
+que a pinça pode confirmar. Em VR, quem confirma é o `selectstart` da sessão
+(a pinça do próprio Quest e o gatilho), com uma janela refratária de 380 ms. Antes,
+a mesma pinça chegava duas vezes (o `pinchstarted` do A-Frame e o "click" do
+cursor), e o botão de som ligava e desligava na mesma pinça. O aperto (grip)
+não confirma mais: a mão descansa nele segurando o controle.
 
 ## O que ficou de fora, de propósito
 
@@ -171,5 +268,6 @@ e 71° de largura a partir da marca de observação, dentro do FOV útil do Ques
 1. **`dados.json` é ASCII** (`"Taxa de Evasao"`). A camada de exibição corrige
    os 4 rótulos conhecidos (`ACENTOS`, em `02-base.js`). Se o `build-dados.js`
    passar a gerar acentuado, esse mapa vira identidade e pode sair.
-2. **O `?v=20`** nos `<script>` e no `<link>` é cache-busting. Suba o número a
-   cada rodada de teste no headset — o navegador do Quest é teimoso com cache.
+2. **O `?v=21`** nos `<script>` e no `<link>` é cache-busting. Com o
+   `node server.js` atual (que manda `no-store`) não precisa mais subir o número;
+   só vale se você servir por outro servidor (ex.: `python -m http.server`).

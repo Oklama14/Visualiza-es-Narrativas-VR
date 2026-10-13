@@ -153,12 +153,13 @@ function buildSerie(ctx, serie, ind, narr) {
       width: 0.2,
       height: CH.maxH + 0.16,
       position: `${x} ${round2(CH.baseY + CH.maxH / 2)} 0.02`,
-      // depthWrite: false - o alvo e quase transparente, mas sem isto ele
-      // ESCREVE no buffer de profundidade e recorta o texto que passa atras
-      // (a etiqueta do evento saia picotada).
-      material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
+      // Material invisivel: o raycaster acerta, nada e desenhado (nem escrito
+      // na profundidade - a etiqueta do evento nao sai mais picotada).
+      material: "visible: false",
     });
     hit.dataset.ano = String(i);
+    // So responde ao olhar com o painel aberto (alvosDoPainel, 50-interacao).
+    setClickable(hit, state.painelAberto);
     dom.chartMarcadores.appendChild(hit);
 
     anoEls.push({ i, ponto, anel, disco, x, y });
@@ -216,7 +217,7 @@ function buildCallout(idx, serie, rotulo, cor, lado) {
     el("a-plane", {
       width: CALLOUT.w,
       height: CALLOUT.h,
-      material: `color: #081022; opacity: 0.9; transparent: true; shader: flat`,
+      material: `color: #081022; shader: flat`,
     })
   );
   g.appendChild(

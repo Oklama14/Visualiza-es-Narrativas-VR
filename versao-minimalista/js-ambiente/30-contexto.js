@@ -9,7 +9,9 @@
 // ----------------------------------------------------------------------------
 
 const CTX_SLABS = 3;
-const CTX_SLAB = { w: 1.5, h: 0.44, gap: 0.07, topY: 1.98 };
+// h 0,48: com 0,44 a leitura de 3 linhas (a mais longa das 576) encostava a
+// ultima linha na borda de baixo da placa.
+const CTX_SLAB = { w: 1.5, h: 0.48, gap: 0.05, topY: 2.0 };
 
 const slabEls = [];
 
@@ -23,7 +25,7 @@ function buildContexto() {
     const fundo = el("a-plane", {
       width: CTX_SLAB.w,
       height: CTX_SLAB.h,
-      material: `color: ${CORES.contextoZona}; opacity: 0.93; transparent: true; shader: flat`,
+      material: `color: ${CORES.contextoZona}; shader: flat`,
     });
     grupo.appendChild(fundo);
 

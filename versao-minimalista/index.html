@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050711'/%3E%3Crect x='14' y='22' width='36' height='26' rx='3' fill='%231d9e75'/%3E%3Crect x='18' y='10' width='28' height='8' rx='2' fill='%238b7fe8'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20" />
+    <link rel="stylesheet" href="styles.css?v=21" />
     <!-- A-Frame: tenta a copia LOCAL (offline) e cai no CDN se ela nao existir. -->
     <script src="assets/aframe-1.5.0.min.js"></script>
     <script>
@@ -19,6 +19,15 @@
   </head>
   <body>
     <div id="transitionOverlay" aria-hidden="true"></div>
+
+    <!-- Aparece quando a pagina foi aberta por HTTP fora do localhost: nesse
+         caso o navegador (inclusive o do Quest) esconde o WebXR e o "Enter VR"
+         vira tela cheia 2D, sem erro nenhum. Ver 05-headset.js. -->
+    <div class="aviso-https" id="avisoHttps" role="alert" hidden>
+      <strong>O modo VR está bloqueado nesta página.</strong>
+      <span>O navegador só libera o WebXR por <b>HTTPS</b> (ou em localhost). No PC, rode
+        <code>node server.js --quest</code> e abra no Quest o endereço <code>https://…:4443</code> que ele mostrar.</span>
+    </div>
 
     <div class="loading-overlay" id="loadingOverlay" role="status" aria-live="polite">
       <div class="loading-card">
@@ -52,7 +61,7 @@
         <ol class="onboard-steps">
           <li><strong>Entre no ambiente.</strong> Você nasce na porta; caminhe (ou mire o disco no piso e confirme) até a marca em frente ao mapa.</li>
           <li><strong>Olhe para uma região do mapa.</strong> O olhar é que põe a região em foco — nada é selecionado sozinho.</li>
-          <li><strong>Confirme.</strong> No Quest 2, <strong>belisque</strong> (polegar + indicador) ou aperte o <strong>gatilho</strong>. No desktop, <strong>clique</strong>. A visualização da região sobe acima do mapa.</li>
+          <li><strong>Confirme.</strong> No Quest 2, <strong>belisque</strong> (polegar + indicador, com a palma virada para fora) ou aperte o <strong>gatilho</strong>. No desktop, <strong>clique</strong>. A visualização da região sobe acima do mapa.</li>
         </ol>
         <p class="onboard-sub">Dentro do painel, olhe para um ano e confirme para trocar o ano. As quatro colunas na beira da mesa trocam o indicador.</p>
         <button id="onboardStart" type="button">Entrar</button>
@@ -68,12 +77,15 @@
          a partir de PLANTA, que por sua vez e derivada do desenho SVG. Nenhuma
          medida de ambiente aparece duplicada aqui.
          ===================================================================== -->
+    <!-- renderer: valores para o Quest 2 (MSAA ligado, 72 Hz estaveis, foveacao
+         media). Para comparar no headset sem editar nada, use a URL:
+         ?hz=90  ?aa=0  ?fov=0..1  ?fps=1 (medidor dentro do VR) - ver 05-headset.js -->
     <a-scene
       id="scene"
       webxr="optionalFeatures: bounded-floor, hand-tracking"
-      renderer="antialias: false; colorManagement: true; foveationLevel: 1; highRefreshRate: true; exposure: 1.05"
+      renderer="antialias: true; colorManagement: true; foveationLevel: 0.5; highRefreshRate: false; exposure: 1.05"
       cursor="rayOrigin: mouse; fuse: false"
-      raycaster="objects: .clickable; far: 14; interval: 60"
+      raycaster="objects: .clickable, .bloqueia-olhar; far: 14; interval: 60"
       fog="type: linear; color: #05070f; near: 5.5; far: 15"
       background="color: #05070f"
       vr-mode-ui="enabled: true"
@@ -92,16 +104,29 @@
           look-controls="pointerLockEnabled: false; mouseEnabled: true"
           wasd-controls="acceleration: 14; fly: false"
         >
-          <!-- Reticulo de olhar: so ligado dentro do headset. -->
-          <a-cursor
+          <!-- Cursor de olhar: so ligado dentro do headset.
+               O raio sai do OLHO (origin 0 0 1 desfaz o -1 da entidade). Com o
+               raio nascendo 1 m a frente, nada a menos de 1 m respondia ao olhar
+               - e da marca de observacao isso inclui a coluna de Retencao e o
+               botao de som. O anel visivel e um filho que o componente
+               reticulo-olhar leva ate o ponto mirado (sem visao dupla) e que e
+               desenhado por cima de tudo (nao some dentro da mesa). -->
+          <a-entity
             id="gazeCursor"
-            visible="false"
             position="0 0 -1"
-            geometry="primitive: ring; radiusInner: 0.011; radiusOuter: 0.019"
-            material="color: #ffffff; shader: flat; opacity: 0.9"
-            raycaster="enabled: false; objects: .clickable; far: 14; interval: 60"
-            cursor="fuse: false"
-          ></a-cursor>
+            raycaster="enabled: false; objects: .clickable, .bloqueia-olhar; far: 14; interval: 50; origin: 0 0 1"
+            cursor="fuse: false; rayOrigin: entity"
+            reticulo-olhar
+          >
+            <a-ring
+              id="gazeRing"
+              visible="false"
+              radius-inner="0.011"
+              radius-outer="0.019"
+              material="color: #ffffff; shader: flat; opacity: 0.9; transparent: true"
+              sobrepor="ordem: 40"
+            ></a-ring>
+          </a-entity>
 
           <!-- Escurecimento de conforto no teleporte (o overlay 2D nao aparece
                dentro do headset). -->
@@ -112,31 +137,55 @@
             height="1.5"
             visible="false"
             material="shader: flat; color: #02040a; opacity: 0; transparent: true; depthTest: false"
+            sobrepor="ordem: 50"
           ></a-plane>
 
-          <!-- Legenda 3D: o unico texto que existe dentro do headset. -->
-          <a-entity id="captionPanel" position="0 -0.52 -1" visible="false">
-            <a-plane width="1.16" height="0.2" material="color: #000000; opacity: 0.72; transparent: true; shader: flat"></a-plane>
+          <!-- Legenda 3D: o unico texto que existe dentro do headset.
+               A ~20 graus abaixo do centro (a -27 graus caia fora da regiao nitida
+               da lente do Quest 2) e com 46 colunas: linhas longas demais
+               empurravam as pontas para a borda borrada da lente. sobrepor = por
+               cima do mundo, senao some quando a pessoa se debruca na mesa. -->
+          <a-entity id="captionPanel" position="0 -0.36 -1" visible="false">
+            <a-plane width="0.92" height="0.2" material="color: #000000; opacity: 0.78; transparent: true; shader: flat" sobrepor="ordem: 30"></a-plane>
             <a-text
               id="captionText"
               value=""
               position="0 0 0.01"
-              width="1.08"
+              width="0.84"
               align="center"
               color="#ffffff"
               font="assets/poppins-msdf.json"
               shader="msdf"
               negate="false"
-              wrap-count="62"
+              wrap-count="46"
+              sobrepor="ordem: 31"
             ></a-text>
           </a-entity>
+
+          <!-- Medidor de quadros (so com ?fps=1): fps real do headset e draw calls. -->
+          <a-text
+            id="fpsTexto"
+            value=""
+            visible="false"
+            position="-0.3 0.3 -1"
+            width="0.3"
+            wrap-count="16"
+            align="left"
+            color="#9dffb0"
+            font="assets/poppins-msdf.json"
+            shader="msdf"
+            negate="false"
+            sobrepor="ordem: 32"
+          ></a-text>
         </a-entity>
 
         <!-- Quest 2: maos E controles declarados. O A-Frame so liga aquele cujo
              input source existir, entao o visitante pode largar os controles no
-             meio da sessao e continuar com as maos (e vice-versa). -->
-        <a-entity id="handLeft" hand-tracking-controls="hand: left; modelStyle: mesh; modelColor: #7fd4ff"></a-entity>
-        <a-entity id="handRight" hand-tracking-controls="hand: right; modelStyle: mesh; modelColor: #7fd4ff"></a-entity>
+             meio da sessao e continuar com as maos (e vice-versa).
+             maos-locais: o modelo da mao vem de assets/maos/ (sem internet o
+             A-Frame buscaria em cdn.aframe.io e as maos ficariam invisiveis). -->
+        <a-entity id="handLeft" hand-tracking-controls="hand: left; modelStyle: mesh; modelColor: #7fd4ff" maos-locais></a-entity>
+        <a-entity id="handRight" hand-tracking-controls="hand: right; modelStyle: mesh; modelColor: #7fd4ff" maos-locais></a-entity>
         <a-entity id="ctrlLeft" oculus-touch-controls="hand: left"></a-entity>
         <a-entity id="ctrlRight" oculus-touch-controls="hand: right"></a-entity>
       </a-entity>
@@ -146,36 +195,35 @@
       <a-entity id="zonas"></a-entity>
 
       <!-- Discos do piso: "voce esta aqui" e destinos de teleporte. -->
+      <!-- O alvo do olhar e um disco CHEIO e invisivel por cima do anel: o anel
+           tem um furo no meio, e e exatamente no meio que a pessoa mira. -->
       <a-entity id="discoUsuario">
         <a-ring
-          class="clickable alvo-teleporte"
           radius-inner="0.2"
           radius-outer="0.28"
           rotation="-90 0 0"
-          data-destino="usuario"
           material="color: #1d9e75; shader: flat; opacity: 0.85; transparent: true"
         ></a-ring>
         <a-circle radius="0.09" rotation="-90 0 0" material="color: #1d9e75; shader: flat"></a-circle>
+        <a-circle class="clickable alvo-teleporte" radius="0.34" rotation="-90 0 0" position="0 0.004 0" data-destino="usuario" material="visible: false"></a-circle>
       </a-entity>
       <a-entity id="discoEntrada">
         <a-ring
-          class="clickable alvo-teleporte"
           radius-inner="0.18"
           radius-outer="0.24"
           rotation="-90 0 0"
-          data-destino="entrada"
           material="color: #4cc9f0; shader: flat; opacity: 0.5; transparent: true"
         ></a-ring>
+        <a-circle class="clickable alvo-teleporte" radius="0.3" rotation="-90 0 0" position="0 0.004 0" data-destino="entrada" material="visible: false"></a-circle>
       </a-entity>
       <a-entity id="discoContexto">
         <a-ring
-          class="clickable alvo-teleporte"
           radius-inner="0.18"
           radius-outer="0.24"
           rotation="-90 0 0"
-          data-destino="contexto"
           material="color: #8fa6c8; shader: flat; opacity: 0.45; transparent: true"
         ></a-ring>
+        <a-circle class="clickable alvo-teleporte" radius="0.3" rotation="-90 0 0" position="0 0.004 0" data-destino="contexto" material="visible: false"></a-circle>
       </a-entity>
 
       <!-- =================================================================
@@ -247,7 +295,12 @@
            PAINEL EMERGENTE (3D): a visualizacao da regiao.
            ================================================================= -->
       <a-entity id="painel" visible="false">
-        <a-plane id="painelFundo" material="color: #0a1020; opacity: 0.96; transparent: true; shader: flat"></a-plane>
+        <!-- Fundo OPACO: com 0,96 de opacidade a placa da parede do fundo
+             aparecia em fantasma atraves do grafico, e cada plano transparente
+             custa sobreposicao no Quest. Com o painel aberto ele tambem barra o
+             olhar (classe bloqueia-olhar, ligada em 50-interacao.js), para nao
+             focar uma regiao escondida atras dele. -->
+        <a-plane id="painelFundo" material="color: #0a1020; shader: flat"></a-plane>
         <a-plane id="painelTopo" height="0.04" material="color: #4cc9f0; shader: flat"></a-plane>
 
         <!-- width/wrap-count andam juntos: o A-Frame dimensiona o glifo por
@@ -282,19 +335,20 @@
       </a-entity>
     </a-scene>
 
-    <!-- Ordem importa: planta -> base -> dados/audio -> construtores -> boot. -->
-    <script src="js-ambiente/00-planta.js?v=20"></script>
-    <script src="js-ambiente/01-telemetria.js?v=20"></script>
-    <script src="js-ambiente/02-base.js?v=20"></script>
-    <script src="js-ambiente/03-audio.js?v=20"></script>
-    <script src="js-ambiente/04-narrativa.js?v=20"></script>
-    <script src="js-ambiente/10-voxel.js?v=20"></script>
-    <script src="js-ambiente/15-sala.js?v=20"></script>
-    <script src="js-ambiente/20-mapa.js?v=20"></script>
-    <script src="js-ambiente/30-contexto.js?v=20"></script>
-    <script src="js-ambiente/40-painel.js?v=20"></script>
-    <script src="js-ambiente/50-interacao.js?v=20"></script>
-    <script src="js-ambiente/60-boot.js?v=20"></script>
-    <script src="js-ambiente/90-estudo.js?v=20"></script>
+    <!-- Ordem importa: planta -> base -> dados/audio -> headset -> construtores -> boot. -->
+    <script src="js-ambiente/00-planta.js?v=21"></script>
+    <script src="js-ambiente/01-telemetria.js?v=21"></script>
+    <script src="js-ambiente/02-base.js?v=21"></script>
+    <script src="js-ambiente/03-audio.js?v=21"></script>
+    <script src="js-ambiente/04-narrativa.js?v=21"></script>
+    <script src="js-ambiente/05-headset.js?v=21"></script>
+    <script src="js-ambiente/10-voxel.js?v=21"></script>
+    <script src="js-ambiente/15-sala.js?v=21"></script>
+    <script src="js-ambiente/20-mapa.js?v=21"></script>
+    <script src="js-ambiente/30-contexto.js?v=21"></script>
+    <script src="js-ambiente/40-painel.js?v=21"></script>
+    <script src="js-ambiente/50-interacao.js?v=21"></script>
+    <script src="js-ambiente/60-boot.js?v=21"></script>
+    <script src="js-ambiente/90-estudo.js?v=21"></script>
   </body>
 </html>

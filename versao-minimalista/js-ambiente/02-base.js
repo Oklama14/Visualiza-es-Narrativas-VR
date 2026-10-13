@@ -259,6 +259,18 @@ function avisaSeQuebrar(entity, texto) {
       `[ambiente] "${texto}" tem ${texto.length} caracteres e o rotulo #${entity.id || "?"} ` +
         `so comporta ${limite} numa linha - vai quebrar por cima do vizinho.`
     );
+    return;
+  }
+  // Contar caracteres nao basta: o A-Frame quebra pela LARGURA medida, e
+  // letras largas (caixa alta, "M", "W") quebram antes do wrap-count. Quando a
+  // fonte ja carregou, o layout real diz quantas linhas sairam.
+  const comp = entity.components && entity.components.text;
+  const layout = comp && comp.currentFont && comp.geometry && comp.geometry.layout;
+  if (layout && layout._linesTotal > 1) {
+    console.error(
+      `[ambiente] "${texto}" quebrou em ${layout._linesTotal} linhas no rotulo #${entity.id || "?"} ` +
+        `(letras largas demais para o wrap-count ${limite}) - vai escrever por cima do vizinho.`
+    );
   }
 }
 

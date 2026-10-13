@@ -182,12 +182,25 @@ const ok = (cond, msg) => { if (!cond) falhas.push(msg); };
 
   // ---- teleporte -----------------------------------------------------------
   await page.evaluate(() => window.AMB.confirmar(document.querySelector('[data-destino="usuario"]')));
-  await page.waitForTimeout(400);
+  // O teleporte espera o blink (setTimeout); com antialias ligado o quadro do
+  // Chromium headless fica lento e o timer atrasa - espera a CONDICAO.
+  await page
+    .waitForFunction(
+      () => {
+        const p = document.getElementById("cameraRig").object3D.position;
+        return Math.abs(p.x - window.AMB.PLANTA.usuario.x) < 0.05 && Math.abs(p.z - window.AMB.PLANTA.usuario.z) < 0.05;
+      },
+      null,
+      { timeout: 5000 }
+    )
+    .catch(() => {});
   const rig = await page.evaluate(() => {
     const p = document.getElementById("cameraRig").object3D.position;
-    return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2) };
+    return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), ux: window.AMB.PLANTA.usuario.x, uz: window.AMB.PLANTA.usuario.z };
   });
   ok(rig.y === 0, `TELEPORTE: o rig foi para y=${rig.y} (precisa ser 0; em VR a altura vem do headset)`);
+  ok(Math.abs(rig.x - rig.ux) < 0.05 && Math.abs(rig.z - rig.uz) < 0.05,
+     `TELEPORTE: o rig parou em ${rig.x}, ${rig.z} e nao no disco de observacao (${rig.ux}, ${rig.uz})`);
   notas.push(`rig apos teleporte: ${rig.x}, ${rig.y}, ${rig.z}`);
 
   // ---- fechar --------------------------------------------------------------
@@ -226,6 +239,21 @@ const ok = (cond, msg) => { if (!cond) falhas.push(msg); };
   ok(combinacoes === 160, `VARREDURA: ${combinacoes} combinacoes (esperado 160)`);
   notas.push(`varredura: ${combinacoes} combinacoes regiao x indicador x ano`);
   await page.waitForTimeout(300);
+
+  // ---- rotulos de linha unica: o layout REAL tem 1 linha --------------------
+  // A trava do setText so ve textos dinamicos e conta caracteres; aqui o que
+  // vale e o layout que o A-Frame montou (letras largas quebram antes). Foi
+  // assim que "CENTRO-OESTE" e "CAMADA DE DADOS BRUTOS" apareceram quebrados.
+  const quebrados = await page.evaluate(() => {
+    const r = [];
+    document.querySelectorAll("a-text[data-linha-unica]").forEach((t) => {
+      const c = t.components.text;
+      const lay = c && c.currentFont && c.geometry && c.geometry.layout;
+      if (lay && lay._linesTotal > 1) r.push(`"${t.getAttribute("value")}" (${lay._linesTotal} linhas)`);
+    });
+    return r;
+  });
+  ok(quebrados.length === 0, `TEXTO: rotulos de linha unica quebrados: ${quebrados.join(", ")}`);
 
   // ---- console limpo -------------------------------------------------------
   const relevantes = errosConsole.filter((e) => !/WebGL|GPU|swiftshader|Failed to load resource.*favicon/i.test(e));

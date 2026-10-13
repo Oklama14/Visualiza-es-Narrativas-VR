@@ -67,6 +67,10 @@ function buildRegioes() {
     attachVoxelMesh(voxHost, handle.mesh);
 
     // Rotulos deitados no tampo, legiveis de quem observa (lado +Z).
+    // Em CAIXA ALTA cada letra e mais larga que a media que o A-Frame usa para
+    // quebrar linha: com wrap-count = numero de letras, "CENTRO-OESTE" saia
+    // "CENTRO-OEST / E". A folga de 30% muda so a largura da caixa - o
+    // tamanho da letra depende apenas de M_CHAR.mesa.
     const rotulo = el("a-text", Object.assign({
       value: r.nome.toUpperCase(),
       position: `0 0.05 ${r.d / 2 - 0.09}`,
@@ -74,7 +78,7 @@ function buildRegioes() {
       align: "center",
       color: CORES.textoFraco,
       font: FONTE,
-    }, escalaTexto(r.nome.length, M_CHAR.mesa)));
+    }, escalaTexto(Math.ceil(r.nome.length * 1.3), M_CHAR.mesa)));
     grupo.appendChild(rotulo);
 
     const valor = el("a-text", Object.assign({
@@ -87,16 +91,17 @@ function buildRegioes() {
     }, escalaTexto(9, 0.028)));
     grupo.appendChild(valor);
 
-    // Alvo do olhar: plano horizontal invisivel cobrindo a regiao.
+    // Alvo do olhar: plano horizontal cobrindo a regiao. `visible: false` no
+    // MATERIAL: o raycaster continua acertando, mas nada e desenhado - antes
+    // era um plano de opacidade 0,001 que custava draw call e sobreposicao em
+    // cada olho, e ainda apagava os rotulos do tampo se escrevesse profundidade.
     const hit = el("a-plane", {
       class: "hit clickable alvo-regiao",
       width: r.w,
       height: r.d,
       rotation: "-90 0 0",
       position: "0 0.09 0",
-      // Sem depthWrite: false, este plano quase invisivel flutua ACIMA dos
-      // rotulos deitados no tampo e os apaga para quem olha de cima.
-      material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
+      material: "visible: false",
     });
     hit.dataset.regiao = r.id;
     grupo.appendChild(hit);
@@ -200,12 +205,17 @@ function buildColunas() {
     }, escalaTexto(Math.max(curto.length, 10), 0.02)));
     grupo.appendChild(nome);
 
+    // Alvo do olhar do tamanho do bloco de voxels, no plano dele. O alvo
+    // antigo (0,5 m de altura, 7 cm a frente) cobria os rotulos e, visto da
+    // marca de observacao - de onde as 4 colunas ficam quase em fila -, a
+    // coluna mais proxima tapava as de tras e a regiao Sul: o olhar nunca
+    // chegava em Conclusao, Evasao nem no Sul.
     const hit = el("a-plane", {
       class: "hit clickable alvo-indicador",
-      width: largura + 0.06,
-      height: alturaVox + 0.22,
-      position: `0 ${(alturaVox + 0.22) / 2} 0.07`,
-      material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
+      width: largura,
+      height: alturaVox + 0.02,
+      position: `0 ${round2(0.02 + (alturaVox + 0.02) / 2)} 0.015`,
+      material: "visible: false",
     });
     hit.dataset.indicador = ind.key;
     grupo.appendChild(hit);

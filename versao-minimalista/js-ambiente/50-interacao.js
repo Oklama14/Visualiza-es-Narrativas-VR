@@ -9,14 +9,29 @@
 //   - Quest 2 com hand tracking .... pinca (polegar + indicador)
 //   - Quest 2 com controles ........ gatilho
 //   - Desktop ...................... clique do mouse
+//
+// UMA acao fisica = UMA confirmacao. No headset a mesma pinca chegava por dois
+// caminhos - o `pinchstarted` do A-Frame e, ao soltar, o "click" que o cursor
+// de olhar gera a partir do select da sessao XR - e o botao de som ligava e
+// desligava na mesma pinca (o gatilho idem). Agora, em VR, quem confirma e o
+// `selectstart` da sessao (a pinca do proprio sistema do Quest, bem mais firme
+// que o limiar de 1,5 cm do A-Frame, e o gatilho dos controles); o
+// `pinchstarted`/`triggerdown` do A-Frame so valem se o sistema nunca mandou
+// select; e uma janela refrataria engole qualquer eco que sobrar.
+// O aperto (grip) deixou de confirmar: e onde a mao descansa segurando o
+// controle, e cada aperto selecionaria o que estivesse sob o olhar.
 // ----------------------------------------------------------------------------
 
 const DWELL_IN = 140; // ms olhando antes de assumir o foco (anti-tremor)
 const DWELL_OUT = 260; // ms fora antes de largar o foco (anti-piscada)
+const REFRATARIO_MS = 380; // dentro disto, uma segunda confirmacao e eco da primeira
 
 let hoverEl = null; // alvo sob o olhar AGORA (a pinca age sobre este)
 let dwellInTimer = null;
 let dwellOutTimer = null;
+let ultimaConfirmacao = -Infinity;
+// O sistema do Quest ja mandou select para maos / controles nesta sessao?
+const selectDoSistema = { mao: false, controle: false };
 
 // ---------------------------------------------------------------------------
 // Foco
@@ -59,8 +74,12 @@ function registrarAlvo(entidade) {
     realce(entidade, false);
   });
 
-  // Desktop: o clique do mouse confirma direto.
-  entidade.addEventListener("click", () => confirmar(entidade));
+  // Desktop: o clique do mouse confirma direto. Em VR o "click" e so o eco do
+  // select da sessao (que ja confirmou no selectstart) - ignorado.
+  entidade.addEventListener("click", () => {
+    if (state.vrMode) return;
+    confirmar(entidade);
+  });
 }
 
 // Realce imediato para alvos que nao sao regiao (indicador, ano, teleporte):
@@ -88,6 +107,44 @@ function realce(entidade, on) {
 // Confirmacao (pinca / gatilho / clique)
 // ---------------------------------------------------------------------------
 
+// Porta unica das entradas do headset (pinca, gatilho). Devolve true se algo
+// foi de fato confirmado.
+function confirmarEntrada(origem, inputSource) {
+  const agora = performance.now();
+  if (agora - ultimaConfirmacao < REFRATARIO_MS) return false;
+  ultimaConfirmacao = agora;
+  const alvo = hoverEl;
+  tlog(origem === "pinca" ? "pinca" : "gatilho", {
+    mao: inputSource && inputSource.handedness ? inputSource.handedness : null,
+    alvo: descreverAlvo(alvo),
+  });
+  if (!alvo) return false;
+  pulsoHaptico(inputSource);
+  confirmar(alvo);
+  return true;
+}
+
+function descreverAlvo(e) {
+  if (!e || !e.dataset) return null;
+  const d = e.dataset;
+  if (d.regiao) return `regiao:${d.regiao}`;
+  if (d.indicador) return `indicador:${d.indicador}`;
+  if (d.ano != null) return `ano:${d.ano}`;
+  if (d.destino) return `destino:${d.destino}`;
+  if (d.acao) return `acao:${d.acao}`;
+  return null;
+}
+
+// Retorno no controle: um toque curto quando a confirmacao pegou em algo.
+function pulsoHaptico(inputSource) {
+  try {
+    const atuador = inputSource && inputSource.gamepad && inputSource.gamepad.hapticActuators && inputSource.gamepad.hapticActuators[0];
+    if (atuador && atuador.pulse) atuador.pulse(0.35, 35);
+  } catch (e) {
+    /* sem vibracao neste dispositivo */
+  }
+}
+
 function confirmar(alvo) {
   const e = alvo || hoverEl;
   if (!e || state.transitioning) return;
@@ -101,7 +158,8 @@ function confirmar(alvo) {
     return;
   }
   if (e.dataset.ano != null) {
-    selecionarAno(Number(e.dataset.ano), true);
+    // Alvos de ano so existem com o painel aberto (ver alvosDoPainel).
+    if (state.painelAberto) selecionarAno(Number(e.dataset.ano), true);
     return;
   }
   if (e.dataset.destino) {
@@ -149,12 +207,15 @@ function abrirPainel(id) {
   r.grupo.object3D.getWorldPosition(p);
 
   // O painel encara quem o chamou: fica ancorado no lugar, mas legivel.
+  // Guinada E inclinacao: o painel fica acima dos olhos, entao o topo inclina
+  // PARA quem olha (X positivo). A versao anterior usava -8 fixo, que deitava o
+  // topo para tras e deixava a face 15 graus fora da linha do olhar.
   const cam = document.getElementById("camera");
-  const cp = new AFRAME.THREE.Vector3();
+  const cp = new AFRAME.THREE.Vector3(PLANTA.usuario.x, 1.6, PLANTA.usuario.z);
   if (cam && cam.object3D) cam.object3D.getWorldPosition(cp);
   const destino = { x: PLANTA.painel.cx, z: PLANTA.painel.cz };
-  const guinada = cam ? encarar(destino, { x: cp.x, z: cp.z }) : 40;
-  dom.painel.setAttribute("rotation", `-8 ${guinada} 0`);
+  const guinada = encarar(destino, { x: cp.x, z: cp.z });
+  dom.painel.setAttribute("rotation", `${inclinacaoPainel(destino, cp)} ${guinada} 0`);
 
   // Fio que liga a regiao ao painel (o tracejado do desenho).
   dom.fio.setAttribute("position", `${round2(p.x)} ${round2((0.86 + PLANTA.painel.baseY) / 2)} ${round2(p.z)}`);
@@ -162,7 +223,7 @@ function abrirPainel(id) {
 
   setEntityVisible(dom.painel, true);
   setEntityVisible(dom.fio, true);
-  setClickable(dom.painelFechar, true);
+  alvosDoPainel(true);
 
   if (!jaAberto) {
     dom.painel.setAttribute("position", `${round2(p.x)} ${PLANTA.painel.subidaDe} ${round2(p.z)}`);
@@ -190,12 +251,30 @@ function abrirPainel(id) {
   refreshRaycasters();
 }
 
+// Inclinacao (graus, eixo X) para a face do painel apontar para o olho.
+function inclinacaoPainel(destino, olho) {
+  const distH = Math.hypot(olho.x - destino.x, olho.z - destino.z) || 1;
+  const graus = (Math.atan2(PLANTA.painel.cy - olho.y, distH) * 180) / Math.PI;
+  return round2(Math.max(-20, Math.min(20, graus)));
+}
+
+// Os alvos do painel (anos, fechar) e o bloqueio do olhar so existem com o
+// painel ABERTO. O raycaster mira por classe, nao por visibilidade: sem isto,
+// com o painel fechado, olhar para o ar acima da mesa ainda pegava os anos
+// invisiveis - e uma pinca ali tocava nota e gravava "ano" na telemetria.
+function alvosDoPainel(ligado) {
+  setClickable(dom.painelFechar, ligado);
+  document.querySelectorAll(".alvo-ano").forEach((a) => setClickable(a, ligado));
+  if (dom.painelFundo) dom.painelFundo.classList.toggle("bloqueia-olhar", !!ligado);
+  refreshRaycasters();
+}
+
 function fecharPainel() {
   if (!state.painelAberto) return;
   state.painelAberto = false;
   state.regiaoId = null;
   state.anoIdx = null;
-  setClickable(dom.painelFechar, false);
+  alvosDoPainel(false);
   dom.painel.removeAttribute("animation__sobe");
   dom.painel.removeAttribute("animation__cresce");
   setEntityVisible(dom.painel, false);
@@ -237,6 +316,11 @@ const DESTINOS = {
   },
 };
 
+// Teleporte que leva a CABECA ao disco e o OLHAR ao alvo.
+// No Quest a cabeca raramente esta no centro do rig: a pessoa ja andou pelo
+// guardian e esta virada para algum lado. Mover so o rig deixava a cabeca a
+// quase 1 m do disco, e girar o rig para "olhar o mapa" ignorava para onde ela
+// estava virada. Aqui a conta desfaz o deslocamento e a guinada da cabeca.
 async function irPara(nome) {
   const d = DESTINOS[nome];
   if (!d) return;
@@ -244,12 +328,34 @@ async function irPara(nome) {
   if (!rig) return;
   comfortBlink();
   await wait(95);
+  const alvo = { x: d.olhar.cx != null ? d.olhar.cx : d.olhar.x, z: d.olhar.cz != null ? d.olhar.cz : d.olhar.z };
+  const pose = poseRig({ x: d.x, z: d.z }, olharPara({ x: d.x, z: d.z }, alvo));
   // Rig SEMPRE no chao (y = 0): em VR a altura vem do headset. Somar 1,6 aqui
   // faria o visitante flutuar a 3,2 m dentro do Quest.
-  rig.setAttribute("position", `${d.x} 0 ${d.z}`);
-  const alvo = { x: d.olhar.cx != null ? d.olhar.cx : d.olhar.x, z: d.olhar.cz != null ? d.olhar.cz : d.olhar.z };
-  rig.setAttribute("rotation", `0 ${olharPara({ x: d.x, z: d.z }, alvo)} 0`);
+  rig.setAttribute("position", `${pose.x} 0 ${pose.z}`);
+  rig.setAttribute("rotation", `0 ${pose.guinada} 0`);
   tlog("teleporte", { destino: nome });
+}
+
+// Pose do rig para que a cabeca (pose LOCAL ao rig: headset em VR, WASD e
+// mouse no desktop) termine em `destino`, olhando na guinada `guinadaAlvo`.
+function poseRig(destino, guinadaAlvo) {
+  const cam = document.getElementById("camera");
+  let lx = 0;
+  let lz = 0;
+  let guinadaCabeca = 0;
+  if (cam && cam.object3D && window.AFRAME) {
+    const o = cam.object3D;
+    lx = o.position.x;
+    lz = o.position.z;
+    guinadaCabeca = (new AFRAME.THREE.Euler().setFromQuaternion(o.quaternion, "YXZ").y * 180) / Math.PI;
+  }
+  const guinada = guinadaAlvo - guinadaCabeca;
+  const r = (guinada * Math.PI) / 180;
+  // Rotacao em Y aplicada ao deslocamento local da cabeca.
+  const wx = lx * Math.cos(r) + lz * Math.sin(r);
+  const wz = -lx * Math.sin(r) + lz * Math.cos(r);
+  return { x: round2(destino.x - wx), z: round2(destino.z - wz), guinada: round2(guinada) };
 }
 
 // ---------------------------------------------------------------------------
@@ -261,32 +367,54 @@ function bindEntradas() {
 
   const scene = document.getElementById("scene");
 
-  // Hand tracking: a pinca e o "clique". Duas maos, mesma acao.
+  // Fallback do A-Frame: so vale enquanto o sistema do Quest nao tiver mandado
+  // select para aquele tipo de entrada (ver o cabecalho deste arquivo).
   ["handLeft", "handRight"].forEach((id) => {
     const m = document.getElementById(id);
     if (!m) return;
     m.addEventListener("pinchstarted", () => {
       state.maoAtiva = true;
-      tlog("pinca", { mao: id });
-      confirmar(null);
+      if (!selectDoSistema.mao) confirmarEntrada("pinca", null);
     });
     // A mao apareceu: o visitante esta sem controles, entao a dica muda.
     m.addEventListener("controllerconnected", () => {
+      if (state.maoAtiva) return; // as duas maos chegam juntas: uma legenda so
       state.maoAtiva = true;
-      setCaption("Mãos reconhecidas. Olhe para um alvo e belisque para confirmar.", 5000);
+      setCaption("Mãos reconhecidas. Olhe para um alvo e belisque (palma para fora) para confirmar.", 6000);
     });
   });
 
-  // Controles Touch: gatilho (ou aperto) equivalem a pinca.
   ["ctrlLeft", "ctrlRight"].forEach((id) => {
     const c = document.getElementById(id);
     if (!c) return;
-    ["triggerdown", "gripdown"].forEach((ev) => c.addEventListener(ev, () => confirmar(null)));
+    c.addEventListener("triggerdown", () => {
+      if (!selectDoSistema.controle) confirmarEntrada("gatilho", null);
+    });
   });
+
+  // Caminho principal no headset: o select da sessao XR (pinca do sistema e
+  // gatilho dos controles), com o inputSource para saber qual mao vibrar.
+  const aoSelecionar = (ev) => {
+    const src = ev.inputSource;
+    const ehMao = !!(src && src.hand);
+    if (ehMao) {
+      selectDoSistema.mao = true;
+      state.maoAtiva = true;
+    } else {
+      selectDoSistema.controle = true;
+    }
+    confirmarEntrada(ehMao ? "pinca" : "gatilho", src);
+  };
+
+  let sessaoXR = null;
 
   // Cursor de olhar: so no headset. No desktop quem mira e o mouse.
   scene.addEventListener("enter-vr", () => {
     state.vrMode = true;
+    selectDoSistema.mao = false;
+    selectDoSistema.controle = false;
+    sessaoXR = scene.xrSession || null;
+    if (sessaoXR) sessaoXR.addEventListener("selectstart", aoSelecionar);
     const cam = document.getElementById("camera");
     if (cam) {
       // local-floor: a altura real vem do headset, entao a camera volta a 0.
@@ -298,13 +426,17 @@ function bindEntradas() {
       setEntityVisible(dom.gazeCursor, true);
       dom.gazeCursor.setAttribute("raycaster", "enabled", true);
     }
-    scene.setAttribute("cursor", "rayOrigin", "entity");
+    // O raio do mouse sai de um ponto fixo da cena em VR e so produziria
+    // hovers fantasmas; dentro do headset quem mira e so o olhar.
+    scene.setAttribute("raycaster", "enabled", false);
     setCaption("Olhe para uma região do mapa e belisque (ou aperte o gatilho).", 7000);
     refreshRaycasters();
   });
 
   scene.addEventListener("exit-vr", () => {
     state.vrMode = false;
+    if (sessaoXR) sessaoXR.removeEventListener("selectstart", aoSelecionar);
+    sessaoXR = null;
     const cam = document.getElementById("camera");
     if (cam) {
       cam.setAttribute("position", "0 1.6 0");
@@ -312,10 +444,9 @@ function bindEntradas() {
       cam.setAttribute("look-controls", "enabled", true);
     }
     if (dom.gazeCursor) {
-      setEntityVisible(dom.gazeCursor, false);
       dom.gazeCursor.setAttribute("raycaster", "enabled", false);
     }
-    scene.setAttribute("cursor", "rayOrigin", "mouse");
+    scene.setAttribute("raycaster", "enabled", true);
     setCaption("");
     refreshRaycasters();
   });

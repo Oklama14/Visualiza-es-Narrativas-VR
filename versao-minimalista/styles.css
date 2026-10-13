@@ -445,3 +445,36 @@ a-scene {
 .onboard-steps strong {
   color: #f2f7ff;
 }
+
+/* Aviso de WebXR bloqueado (pagina aberta por HTTP fora do localhost). Fica
+   acima do onboarding: sem HTTPS, nada do que o onboarding promete funciona. */
+.aviso-https {
+  position: fixed;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  width: min(640px, calc(100vw - 32px));
+  padding: 12px 16px;
+  color: #fff4e5;
+  background: rgba(64, 30, 4, 0.94);
+  border: 1px solid #ffa23a;
+  border-left: 4px solid #ffa23a;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+
+.aviso-https[hidden] {
+  display: none;
+}
+
+.aviso-https code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 0.86em;
+}

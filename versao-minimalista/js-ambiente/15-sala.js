@@ -119,7 +119,7 @@ function buildPlacaSala(raiz) {
     el("a-plane", {
       width: 2.8,
       height: 0.72,
-      material: "color: #0a111f; opacity: 0.92; transparent: true; shader: flat",
+      material: "color: #0a111f; shader: flat",
     })
   );
   g.appendChild(
@@ -191,7 +191,7 @@ function buildZonas() {
       align: "center",
       color: "#3f7f68",
       font: FONTE,
-    }, escalaTexto(22, 0.032)))
+    }, escalaTexto(29, 0.032))) // caixa alta: folga para nao quebrar em "... / BRUTOS"
   );
 
   applyPendingTransforms(raiz);

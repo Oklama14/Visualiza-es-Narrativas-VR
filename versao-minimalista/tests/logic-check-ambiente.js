@@ -18,7 +18,7 @@ const DIR = path.join(ROOT, "js-ambiente");
 
 const ORDEM = [
   "00-planta", "01-telemetria", "02-base", "03-audio", "04-narrativa",
-  "10-voxel", "15-sala", "20-mapa", "30-contexto", "40-painel",
+  "05-headset", "10-voxel", "15-sala", "20-mapa", "30-contexto", "40-painel",
   "50-interacao", "60-boot", "90-estudo",
 ];
 
@@ -206,6 +206,14 @@ const CHECKS = String.raw`
   ok(distPainel >= 1.2, "C3: o painel fica a " + distPainel.toFixed(2) + " m - perto demais (desconforto de vergencia)");
   nota("C painel a " + distPainel.toFixed(2) + " m; elevacao " + elevBase.toFixed(1) + " a " + elevTopo.toFixed(1) +
        " graus; largura " + larguraAng.toFixed(1) + " graus");
+
+  // C5: o painel inclina PARA quem esta na marca (o topo vem na direcao do
+  // olho). A rotacao do A-Frame e YXZ: X positivo traz o topo para frente.
+  var incl = inclinacaoPainel({ x: PLANTA.painel.cx, z: PLANTA.painel.cz }, { x: obs.x, y: OLHO, z: obs.z });
+  var elevCentro = Math.atan2(PLANTA.painel.cy - OLHO, distPainel) * 180 / Math.PI;
+  ok(incl > 0 && Math.abs(incl - elevCentro) < 1,
+     "C5: o painel inclina " + incl + " graus; para encarar o olho seriam " + elevCentro.toFixed(1));
+  nota("C5 painel inclinado " + incl + " graus para o olho (centro " + elevCentro.toFixed(1) + " graus acima)");
 
   // C4: o mapa inteiro precisa ser alcancavel pelo olhar de quem esta na marca.
   REGIOES_MESA.forEach(function (r) {

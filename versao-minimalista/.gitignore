@@ -1,0 +1,3 @@
+# certificado autoassinado gerado por "node server.js --quest" (contem a chave privada)
+.certs/
+node_modules/
