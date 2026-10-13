@@ -1,3 +1,7 @@
 # certificado autoassinado gerado por "node server.js --quest" (contem a chave privada)
 .certs/
 node_modules/
+
+# DADOS DE PARTICIPANTES (telemetria + SSQ gravados pelo server.js): nunca
+# versionar - o repositorio e publico. Ver PILOTO-ROTEIRO.md.
+dados-estudo/
