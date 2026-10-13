@@ -112,20 +112,65 @@ Ex.: `https://192.168.0.12:4443/?fps=1&hz=90`. Se o medidor ficar âmbar (abaixo
 do alvo) com 90 Hz, fique nos 72 Hz: quadro perdido no headset é pior que taxa
 menor.
 
-Modo estudo (telemetria + onboarding sempre visível + 3 tarefas de compreensão
-no painel do pesquisador):
+## Estudo com usuários
+
+O roteiro passo a passo está em **`PILOTO-ROTEIRO.md`**. Em resumo:
+
+```powershell
+node server.js --quest
+```
+
+e, **no próprio notebook**, abra a estação do pesquisador:
+`http://127.0.0.1:4173/pesquisador.html`. Ela conduz a sessão inteira sem tocar
+no headset: triagem, SSQ antes e depois, treino, exploração livre (início e
+fim), as 3 tarefas (a pergunta aparece para o participante; você registra a
+resposta falada e o tempo é medido na estação) e o download dos dados. A
+página do participante é `https://<ip>:4443/?estudo=1&p=P01` no Quest, ou
+`controle-2d.html?estudo=1&p=P01` na condição 2D.
 
 ```
-http://127.0.0.1:4173/?estudo=1&p=P01
+ notebook (node server.js --quest)                  participante
+ ┌───────────────────────────────┐  telemetria (POST) ┌────────────────────┐
+ │ estação do pesquisador        │ ◄──────────────────│ Quest: index.html   │
+ │ 127.0.0.1:4173/pesquisador    │ ──────────────────►│ ou controle-2d.html │
+ │ dados-estudo/P01.jsonl        │  comandos (SSE)    └────────────────────┘
+ └───────────────────────────────┘
 ```
 
-O painel do pesquisador e o botão "Exportar sessão" são DOM: aparecem no
-**monitor do PC** quando a cena roda no Chrome do PC com o Quest ligado por
-**Quest Link / Air Link** — é o "monitor espelhado" que os comentários do código
-pressupõem. No navegador do próprio Quest (standalone), eles ficam na página 2D
-do headset, invisíveis durante o VR: a legenda da tarefa não pode ser disparada
-de fora, e a exportação só acontece depois de sair do VR (o arquivo cai nos
-Downloads do Quest).
+- **Para onde vão os dados:** `dados-estudo/<participante>.jsonl`, uma linha
+  por evento, no notebook. A pasta está no `.gitignore` e o servidor nunca a
+  serve. Registros da estação, comandos, estado ao vivo e download só respondem
+  a pedidos do próprio notebook (`127.0.0.1`). Para gravar noutro lugar
+  (PowerShell): `$env:VRLAB_DADOS_DIR='D:\estudo'; node server.js --quest`.
+- **Queda de rede:** o headset guarda no próprio aparelho o que ainda não foi
+  confirmado e reenvia quando a conexão volta (ou no próximo carregamento). O
+  botão "Exportar sessão" (download do JSON completo) continua como terceira via.
+- **O que a telemetria grava:** versão do artefato e do navegador; posição da
+  cabeça, guinada e inclinação, quadros por segundo e alvo sob o olhar a 2 Hz;
+  fontes de entrada (mãos/controles) e perdas de rastreio; foco, painel, ano,
+  indicador, pinças (inclusive sem alvo), teleportes; tarefas, treino, comandos.
+  Na 2D: rolagem e seção visível a 2 Hz, cliques e os mesmos eventos de foco,
+  painel, ano e indicador.
+- **Treino (só imersiva):** sala sem dados e três gestos: beliscar um alvo,
+  teleportar por um disco, dar um passo real até uma marca. No fim a pessoa
+  volta para a porta (`85-treino.js`). Para ver sem a estação: `?treino=1`.
+- **Tarefas:** definidas uma vez só em `js-ambiente/07-tarefas.js`, com o
+  gabarito calculado dos dados e a **tolerância de 1 bloco** (candidatos a menos
+  de 1 pp do máximo também contam; o acerto estrito vai junto).
+- **Análise:** `node estudo/analisar.js --csv resumo.csv` gera uma linha por
+  participante × condição com as variáveis dependentes (ver o cabeçalho do
+  script).
+- **Painel local (`?painel=local`):** o painel antigo, em DOM, para quando não
+  há estação (ex.: cena rodando no PC por Quest Link). Ele fica na tela do
+  participante na 2D, por isso não é o padrão.
+
+**Condição 2D (`controle-2d.html`).** É a mesma sala em página plana: as três
+camadas viram três áreas (mapa com os blocos, painel da região, anotações), com
+os mesmos textos, valores, cartões do gráfico e parede de 100 blocos - todos
+gerados por `04-narrativa.js` e `07-tarefas.js`, os mesmos arquivos da
+imersiva. Passar o mouse numa região a põe em foco (como o olhar); clicar abre
+o painel (como a pinça). `tests/paridade-2d.js` abre as duas páginas e compara o
+texto exibido em 64 estados.
 
 ## Testes
 
@@ -135,10 +180,21 @@ node tests/smoke-ambiente.js         # Chromium headless (precisa de playwright)
 node tests/smoke-ambiente.js --shot cena.png
 node tests/quest-sim.js              # Quest 2 emulado (precisa de playwright + iwer)
 node tests/quest-sim.js --shot visao-quest.png
+node tests/paridade-2d.js            # 2D x imersiva: o mesmo texto nos dois (playwright)
+node tests/estudo-sim.js             # ensaio do estudo ponta a ponta (playwright + iwer)
 ```
 
-Para os dois últimos: `npm i -D playwright iwer` uma vez (o `quest-sim` leva
-uns 2 min, o SwiftShader renderiza os dois olhos em software).
+Para os quatro últimos: `npm i -D playwright iwer` uma vez (o `quest-sim` e o
+`estudo-sim` levam uns 2-4 min: o SwiftShader renderiza os dois olhos em
+software).
+
+O `estudo-sim` é o ensaio geral sem ninguém no headset: sobe o `server.js`,
+abre a estação, um Quest 2 emulado e depois a página 2D, e conduz uma sessão
+inteira (triagem, SSQ, treino, exploração andando e teleportando, as 3 tarefas
+pela estação, SSQ depois). No meio derruba a rede por 4 s e confere que nada se
+perdeu nem duplicou. No fim roda `estudo/analisar.js` sobre o `.jsonl` gravado
+e exige que as variáveis dependentes saiam dele. Os dados vão para uma pasta
+temporária.
 
 O `logic-check` confere a geometria derivada da planta (proporção da sala,
 camadas sem sobreposição, placas cabendo nas regiões, colunas sem tapar o mapa),
@@ -168,23 +224,35 @@ congelada no ar); console limpo.
 
 ```
 index.html                    a cena (estrutura e conteúdo; medidas vêm do JS)
+controle-2d.html              condição 2D do estudo (mesmos textos e tarefas)
+pesquisador.html              estação do pesquisador (abrir em 127.0.0.1)
+server.js                     servidor local + HTTPS do Quest + api do estudo
 index.estacoes.bak.html       a versão anterior, de 6 estações, intacta
 js-ambiente/00-planta.js      O DESENHO EM METROS — fonte única da geometria
-js-ambiente/02-base.js        estado, utilitários, fonte e escala de texto
+js-ambiente/01-telemetria.js  telemetria (notebook + reserva local) e comandos
+js-ambiente/02-base.js        estado, utilitários, fonte, escala de texto, legenda
 js-ambiente/03-audio.js       som posicional (leitmotiv, nota do ano, acorde)
-js-ambiente/04-narrativa.js   narrativa e anotações calculadas dos dados
+js-ambiente/04-narrativa.js   TODO texto exibido (narrativa, anotações, painel,
+                              mesa) - compartilhado com a condição 2D
 js-ambiente/05-headset.js     só do Quest: perfil pela URL, retículo, legenda por
                               cima, mãos locais, medidor de fps, aviso de HTTPS
+js-ambiente/07-tarefas.js     as 3 tarefas e o gabarito (tolerância de 1 bloco)
 js-ambiente/15-sala.js        sala, zonas do piso, placa e posicionamento
 js-ambiente/20-mapa.js        mesa: regiões em voxel + colunas de indicador
 js-ambiente/30-contexto.js    camada textual
 js-ambiente/40-painel.js      painel emergente (gráfico + parede)
 js-ambiente/50-interacao.js   foco por olhar, pinça/gatilho, teleporte
 js-ambiente/60-boot.js        boot, HUD, onboarding, handle window.AMB
+js-ambiente/85-treino.js      treino de 3 gestos antes das tarefas
+js-ambiente/90-estudo.js      lado do participante no modo estudo (comandos)
+estudo/ssq.js                 itens e pontuação do SSQ
+estudo/analisar.js            dados-estudo/*.jsonl -> variáveis dependentes
 assets/aframe-1.5.0.min.js    A-Frame local (offline)
 assets/poppins-msdf.json/png  fonte MSDF local
 assets/maos/                  modelo das mãos (WebXR Input Profiles, MIT)
 tests/quest-sim.js            simulação do Quest 2 (IWER)
+tests/paridade-2d.js          2D x imersiva: mesmo texto
+tests/estudo-sim.js           ensaio do estudo ponta a ponta
 ```
 
 A pasta `js/` antiga e os `.bak` ficaram no lugar mas **não são mais
@@ -268,6 +336,6 @@ não confirma mais: a mão descansa nele segurando o controle.
 1. **`dados.json` é ASCII** (`"Taxa de Evasao"`). A camada de exibição corrige
    os 4 rótulos conhecidos (`ACENTOS`, em `02-base.js`). Se o `build-dados.js`
    passar a gerar acentuado, esse mapa vira identidade e pode sair.
-2. **O `?v=21`** nos `<script>` e no `<link>` é cache-busting. Com o
+2. **O `?v=22`** nos `<script>` e no `<link>` é cache-busting. Com o
    `node server.js` atual (que manda `no-store`) não precisa mais subir o número;
    só vale se você servir por outro servidor (ex.: `python -m http.server`).

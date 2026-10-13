@@ -18,8 +18,8 @@ const DIR = path.join(ROOT, "js-ambiente");
 
 const ORDEM = [
   "00-planta", "01-telemetria", "02-base", "03-audio", "04-narrativa",
-  "05-headset", "10-voxel", "15-sala", "20-mapa", "30-contexto", "40-painel",
-  "50-interacao", "60-boot", "90-estudo",
+  "05-headset", "07-tarefas", "10-voxel", "15-sala", "20-mapa", "30-contexto", "40-painel",
+  "50-interacao", "60-boot", "85-treino", "90-estudo",
 ];
 
 function stubEl() {
@@ -350,6 +350,46 @@ const CHECKS = String.raw`
      "D6: o eixo do tempo nao cobre 2017-2024 de ponta a ponta");
   ok(Math.abs(chartYFor(0) - CH.baseY) < 1e-6 && Math.abs(chartYFor(100) - (CH.baseY + CH.maxH)) < 1e-6,
      "D6: o eixo de valores nao vai de 0 a 100%");
+
+  // ========================================================================
+  // T - Tarefas do estudo (07-tarefas.js) e treino (85-treino.js)
+  // ========================================================================
+
+  // T1: o gabarito e calculado e cada resposta aceita e uma opcao da tarefa.
+  var pacote = gerarTarefas(DADOS);
+  ok(pacote.lista.length === 3, "T1: esperadas 3 tarefas, vieram " + pacote.lista.length);
+  pacote.lista.forEach(function (t) {
+    ok(t.opcoes.indexOf(t.correta) >= 0, "T1: a resposta estrita de " + t.id + " (" + t.correta + ") nao esta entre as opcoes");
+    ok(t.aceitas.indexOf(t.correta) >= 0, "T1: " + t.id + " nao aceita a propria resposta estrita");
+    t.aceitas.forEach(function (a) { ok(t.opcoes.indexOf(a) >= 0, "T1: " + t.id + " aceita " + a + ", que nao e opcao"); });
+    ok(t.aceitas.length < t.opcoes.length, "T1: " + t.id + " aceita todas as opcoes (a tarefa nao discrimina nada)");
+  });
+
+  // T2: a tolerancia de 1 bloco. Qualquer candidato aceito fica a menos de
+  // 1 pp do maximo; qualquer candidato recusado fica a 1 pp ou mais.
+  var bEv = DADOS.brasil.series.evasao;
+  var maxEv = Math.max.apply(null, bEv.filter(function (v) { return v != null; }));
+  DADOS.anos.forEach(function (ano, i) {
+    if (bEv[i] == null) return;
+    var aceito = pacote.lista[0].aceitas.indexOf(String(ano)) >= 0;
+    ok(aceito === (maxEv - bEv[i] < TOLERANCIA_PP), "T2: T1 trata " + ano + " (" + bEv[i] + "%) de forma inconsistente com a tolerancia");
+  });
+  var c1 = corrigirResposta(pacote.lista[0], pacote.lista[0].correta);
+  ok(c1.correta && c1.corretaEstrita, "T2: a resposta estrita nao e corrigida como certa");
+  nota("T1/T2 gabarito: " + pacote.lista.map(function (t) { return t.id + "=" + t.aceitas.join("|"); }).join("  ") +
+       (pacote.avisos.length ? "  (" + pacote.avisos.length + " aviso(s) de empate)" : ""));
+
+  // T3: o treino cabe na sala e a marca do passo fica perto (um passo real).
+  var dentroSala = function (p, m) { return Math.abs(p.x) <= PLANTA.sala.w / 2 - m && Math.abs(p.z) <= PLANTA.sala.d / 2 - m; };
+  ["inicio", "alvo", "disco", "marca"].forEach(function (k) {
+    ok(dentroSala(TREINO_PONTOS[k], 0.4), "T3: o ponto de treino '" + k + "' fica a menos de 0,4 m da parede");
+  });
+  var passo = Math.hypot(TREINO_PONTOS.marca.x - TREINO_PONTOS.disco.x, TREINO_PONTOS.marca.z - TREINO_PONTOS.disco.z);
+  ok(passo >= 0.4 && passo <= 0.8, "T3: a marca do passo esta a " + passo.toFixed(2) + " m de quem chega pelo disco (esperado 0,4-0,8 m)");
+  var dAlvo = Math.hypot(TREINO_PONTOS.alvo.x - TREINO_PONTOS.inicio.x, TREINO_PONTOS.alvo.z - TREINO_PONTOS.inicio.z);
+  var elevAlvo = Math.atan2(TREINO_PONTOS.alvo.y - 1.6, dAlvo) * 180 / Math.PI;
+  ok(elevAlvo > -25 && elevAlvo < 10, "T3: o alvo de pinca fica a " + elevAlvo.toFixed(1) + " graus do olhar");
+  nota("T3 treino: alvo a " + dAlvo.toFixed(2) + " m (" + elevAlvo.toFixed(1) + " graus), passo de " + passo.toFixed(2) + " m");
 
   // ========================================================================
   // H - Contrato HTML <-> codigo
