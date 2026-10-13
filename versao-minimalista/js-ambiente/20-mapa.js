@@ -195,7 +195,7 @@ function buildColunas() {
 
     // Primeira palavra: "Eficiencia Academica" nao cabe na largura da coluna,
     // e "Eficiencia" ja identifica sozinha (a cor faz o resto).
-    const curto = rotulo(ind.label).replace("Taxa de ", "").split(" ")[0];
+    const curto = rotuloCurtoIndicador(ind);
     const nome = el("a-text", Object.assign({
       value: curto,
       position: `0 ${alturaVox + 0.115} 0`,
@@ -231,12 +231,8 @@ function buildColunas() {
 // Atualizacao (troca de indicador, troca de foco)
 // ---------------------------------------------------------------------------
 
-// Quantos blocos acender para um valor percentual: arredonda ao inteiro e
-// respeita o trilho de 100 (nunca estoura nem some com um valor > 0).
-function blocosPara(valor) {
-  if (valor == null) return 0;
-  return Math.max(valor > 0 ? 1 : 0, Math.min(100, Math.round(valor)));
-}
+// blocosPara(valor) mora em 04-narrativa.js (a mesa da condicao 2D acende
+// os mesmos blocos).
 
 function updateMapa() {
   const ind = indicadorByKey(state.indicadorKey);
@@ -245,7 +241,7 @@ function updateMapa() {
     const ctx = contextoById(geo.id);
     const v = ctx ? latestValue(ctx.series[state.indicadorKey]) : null;
     handle.setSegments(v == null ? [] : [{ cor: ind.cor, n: blocosPara(v) }]);
-    setText(valor, v == null ? "sem dados" : `${fmt(v)}%`);
+    setText(valor, textoValorRegiao(v));
   });
 
   DADOS.indicadores.forEach((i) => {
@@ -260,10 +256,7 @@ function updateMapa() {
     c.grupo.setAttribute("animation__sel", `property: scale; to: ${ativo ? "1.08 1.08 1.08" : "1 1 1"}; dur: 160`);
   });
 
-  setText(
-    dom.mesaValorTitulo,
-    `${rotulo(ind.label).toUpperCase()} EM ${DADOS.anos[DADOS.anos.length - 1]}   ·   1 BLOCO = 1%`
-  );
+  setText(dom.mesaValorTitulo, tituloMesa(state.indicadorKey));
 }
 
 // Destaque da regiao sob o olhar (hover) e da regiao confirmada.

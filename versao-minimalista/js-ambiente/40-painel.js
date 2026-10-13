@@ -82,7 +82,7 @@ function renderPainel() {
   const serie = ctx.series[state.indicadorKey];
   const narr = computeNarrative(ctx, state.indicadorKey);
 
-  setText(dom.painelKicker, "VISUALIZAÇÃO DA REGIÃO");
+  setText(dom.painelKicker, TEXTO_PAINEL_KICKER);
   setText(dom.painelTitulo, rotuloContexto(ctx));
   setText(dom.painelManchete, narr.manchete);
   dom.painelAcento.setAttribute("material", "color", ind.cor);
@@ -166,19 +166,15 @@ function buildSerie(ctx, serie, ind, narr) {
   });
 
   // Callouts do pico e do vale: os dois momentos que a serie realmente conta.
-  // Quem e o pior ano depende do SENTIDO do indicador: numa taxa de evasao o
-  // pior e o PICO; numa taxa de conclusao o pior e o VALE. Numa taxa neutra
-  // (retencao) nao existe melhor nem pior - so maior e menor.
-  const r = rotulosCallout(ind.sentido);
-  const primeiro = { idx: narr[r.criticoEm], rotulo: r.critico, cor: "#ff9f6b" };
-  const segundo = { idx: narr[r.outroEm], rotulo: r.outro, cor: "#7fd4ff" };
-  buildCallout(primeiro.idx, serie, primeiro.rotulo, primeiro.cor, "acima");
-  if (segundo.idx !== primeiro.idx) {
+  // Quem e o pior ano depende do SENTIDO do indicador (rotulosCallout, em
+  // 04-narrativa.js - a condicao 2D usa os mesmos cartoes).
+  const cards = calloutsDaSerie(ctx, state.indicadorKey);
+  cards.forEach((c, k) => {
     // Cards de 0,44 m com passo de 0,24 m entre anos: pico e vale proximos se
     // encavalariam, entao o segundo desce para baixo da linha.
-    const colide = Math.abs(chartXFor(segundo.idx) - chartXFor(primeiro.idx)) < CALLOUT.w + 0.08;
-    buildCallout(segundo.idx, serie, segundo.rotulo, segundo.cor, colide ? "abaixo" : "acima");
-  }
+    const colide = k > 0 && Math.abs(chartXFor(c.idx) - chartXFor(cards[0].idx)) < CALLOUT.w + 0.08;
+    buildCallout(c, serie, c.tipo === "critico" ? "#ff9f6b" : "#7fd4ff", colide ? "abaixo" : "acima");
+  });
 
   buildEventos(serie);
   applyPendingTransforms(dom.chartLinha);
@@ -189,21 +185,11 @@ function buildSerie(ctx, serie, ind, narr) {
 
 const CALLOUT = { w: 0.44, h: 0.1, folga: 0.13 };
 
-// Nomes dos dois extremos da serie, por sentido do indicador.
-// `criticoEm`/`outroEm` dizem qual campo da narrativa (peakIdx/valleyIdx) usar.
-function rotulosCallout(sentido) {
-  if (sentido === "negativo") {
-    return { criticoEm: "peakIdx", critico: "PIOR ANO", outroEm: "valleyIdx", outro: "MELHOR ANO" };
-  }
-  if (sentido === "positivo") {
-    return { criticoEm: "valleyIdx", critico: "PIOR ANO", outroEm: "peakIdx", outro: "MELHOR ANO" };
-  }
-  // neutro: a taxa de retencao nao e boa nem ruim por si - so alta ou baixa.
-  return { criticoEm: "peakIdx", critico: "MAIOR", outroEm: "valleyIdx", outro: "MENOR" };
-}
+// rotulosCallout(sentido) mora em 04-narrativa.js: a condicao 2D usa os
+// mesmos nomes (PIOR ANO / MELHOR ANO / MAIOR / MENOR).
 
-function buildCallout(idx, serie, rotulo, cor, lado) {
-  if (idx == null || idx < 0 || serie[idx] == null) return;
+function buildCallout(card, serie, cor, lado) {
+  const idx = card.idx;
   const x = chartXFor(idx);
   const y = chartYFor(serie[idx]);
   // Teto e piso: o card nunca sobe ate o filete do cabecalho nem desce sobre
@@ -230,21 +216,21 @@ function buildCallout(idx, serie, rotulo, cor, lado) {
   );
   g.appendChild(
     el("a-text", Object.assign({
-      value: `${rotulo} · ${DADOS.anos[idx]}`,
+      value: card.rotulo,
       position: "0 0.014 0.004",
       align: "center",
       color: cor,
       font: FONTE,
-    }, escalaPara(`${rotulo} · ${DADOS.anos[idx]}`, 0.026, CALLOUT.w - 0.04)))
+    }, escalaPara(card.rotulo, 0.026, CALLOUT.w - 0.04)))
   );
   g.appendChild(
     el("a-text", Object.assign({
-      value: `${fmt(serie[idx])}%`,
+      value: card.valor,
       position: "0 -0.024 0.004",
       align: "center",
       color: CORES.texto,
       font: FONTE,
-    }, escalaPara(`${fmt(serie[idx])}%`, 0.03, CALLOUT.w - 0.06)))
+    }, escalaPara(card.valor, 0.03, CALLOUT.w - 0.06)))
   );
   dom.chartAnotacoes.appendChild(g);
 }
@@ -266,12 +252,12 @@ function buildEventos(serie) {
     );
     dom.chartAnotacoes.appendChild(
       el("a-text", Object.assign({
-        value: `${ev.ano} · Pandemia`,
+        value: rotuloEvento(ev),
         position: `${x} ${round2(CH.baseY + 0.05)} 0.01`,
         align: "center",
         color: "#ffd166",
         font: FONTE,
-      }, escalaPara(`${ev.ano} · Pandemia`, 0.024, 0.42)))
+      }, escalaPara(rotuloEvento(ev), 0.024, 0.42)))
     );
   });
 }
@@ -305,7 +291,7 @@ function updateAno(comSom) {
   });
 
   const v = serie[idx];
-  setText(dom.chartReadout, v == null ? `${DADOS.anos[idx]}  ·  sem dados` : `${DADOS.anos[idx]}   ${fmt(v)}%`);
+  setText(dom.chartReadout, textoLeituraAno(ctx, state.indicadorKey, idx));
   dom.chartReadout.setAttribute("color", ind.cor);
 
   const alvo = anoEls.find((a) => a.i === idx);
@@ -317,39 +303,30 @@ function updateAno(comSom) {
   updateParede(ctx, idx, comSom);
 }
 
-// Reparticao inteira dos 100 blocos entre concluidos / retidos / evadidos:
-// arredonda cada fatia e devolve a sobra ao maior grupo, entao a parede soma
-// SEMPRE exatamente 100 - sem isso um ano aparece com 99 ou 101 blocos e a
-// promessa "1 bloco = 1%" quebra na cara de quem conta.
-function reparte100(comp) {
-  const ns = [comp.concluidos, comp.retidos, comp.evadidos].map((v) => Math.round(v * 100));
-  const sobra = 100 - ns.reduce((a, b) => a + b, 0);
-  ns[ns.indexOf(Math.max.apply(null, ns))] += sobra;
-  return ns;
-}
+// reparte100(comp) mora em 04-narrativa.js (a parede da condicao 2D usa a
+// mesma conta, entao os dois mostram exatamente os mesmos blocos).
 
 function updateParede(ctx, idx, comSom) {
-  const comp = composicaoDoAno(ctx, idx);
-  setText(dom.paredeAno, `${DADOS.anos[idx]}  ·  1 bloco = 1%`);
+  const p = textosParede(ctx, idx);
+  setText(dom.paredeAno, p.titulo);
 
-  if (!comp) {
+  if (!p.blocos) {
     paredeHandle.setSegments([]);
-    setText(dom.paredeLegConc, "sem composição para este ano");
-    setText(dom.paredeLegRet, "");
-    setText(dom.paredeLegEvad, "");
+    setText(dom.paredeLegConc, p.legendas[0]);
+    setText(dom.paredeLegRet, p.legendas[1]);
+    setText(dom.paredeLegEvad, p.legendas[2]);
     return;
   }
 
-  const ns = reparte100(comp);
   paredeHandle.setSegments(
-    ["concluidos", "retidos", "evadidos"].map((k, i) => ({ cor: COMP_CORES[k], n: ns[i] }))
+    ["concluidos", "retidos", "evadidos"].map((k, i) => ({ cor: COMP_CORES[k], n: p.blocos[i] }))
   );
 
-  setText(dom.paredeLegConc, `${ns[0]} concluíram  (${fmtInt(comp.brutos.concluidos)})`);
-  setText(dom.paredeLegRet, `${ns[1]} retidos  (${fmtInt(comp.brutos.retidos)})`);
-  setText(dom.paredeLegEvad, `${ns[2]} evadiram  (${fmtInt(comp.brutos.evadidos)})`);
+  setText(dom.paredeLegConc, p.legendas[0]);
+  setText(dom.paredeLegRet, p.legendas[1]);
+  setText(dom.paredeLegEvad, p.legendas[2]);
 
-  if (comSom) playCompositionChord(comp.concluidos, comp.retidos, comp.evadidos, dom.paredeHost);
+  if (comSom) playCompositionChord(p.comp.concluidos, p.comp.retidos, p.comp.evadidos, dom.paredeHost);
 }
 
 // ---------------------------------------------------------------------------
@@ -403,5 +380,5 @@ function addDashedSegments(container, pts, color, z, thickness, opacity, dash = 
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { CH, PAREDE, reparte100 };
+  module.exports = { CH, PAREDE };
 }

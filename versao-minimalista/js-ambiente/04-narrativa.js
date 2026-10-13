@@ -128,6 +128,108 @@ function ultimoAnoComComposicao(ctx) {
   return DADOS.anos.length - 1;
 }
 
+// Nomes dos dois extremos da serie, por sentido do indicador.
+// `criticoEm`/`outroEm` dizem qual campo da narrativa (peakIdx/valleyIdx) usar.
+function rotulosCallout(sentido) {
+  if (sentido === "negativo") {
+    return { criticoEm: "peakIdx", critico: "PIOR ANO", outroEm: "valleyIdx", outro: "MELHOR ANO" };
+  }
+  if (sentido === "positivo") {
+    return { criticoEm: "valleyIdx", critico: "PIOR ANO", outroEm: "peakIdx", outro: "MELHOR ANO" };
+  }
+  // neutro: a taxa de retencao nao e boa nem ruim por si - so alta ou baixa.
+  return { criticoEm: "peakIdx", critico: "MAIOR", outroEm: "valleyIdx", outro: "MENOR" };
+}
+
+// Reparticao inteira dos 100 blocos entre concluidos / retidos / evadidos:
+// arredonda cada fatia e devolve a sobra ao maior grupo, entao a parede soma
+// SEMPRE exatamente 100 - sem isso um ano aparece com 99 ou 101 blocos e a
+// promessa "1 bloco = 1%" quebra na cara de quem conta.
+function reparte100(comp) {
+  const ns = [comp.concluidos, comp.retidos, comp.evadidos].map((v) => Math.round(v * 100));
+  const sobra = 100 - ns.reduce((a, b) => a + b, 0);
+  ns[ns.indexOf(Math.max.apply(null, ns))] += sobra;
+  return ns;
+}
+
+// ---------------------------------------------------------------------------
+// Textos do painel e da mesa - os MESMOS nas duas condicoes do estudo.
+// A condicao imersiva (40-painel.js, 20-mapa.js) e a 2D (controle-2d.html)
+// escrevem exatamente estas strings; o teste de paridade confere.
+// ---------------------------------------------------------------------------
+
+const TEXTO_PAINEL_KICKER = "VISUALIZAÇÃO DA REGIÃO";
+
+// Os dois cartoes do grafico: o ano critico e o outro extremo (um so se os
+// dois caem no mesmo ano). tipo "critico" | "outro".
+function calloutsDaSerie(ctx, key) {
+  const ind = indicadorByKey(key);
+  const serie = ctx.series[key];
+  const narr = computeNarrative(ctx, key);
+  const r = rotulosCallout(ind.sentido);
+  const lista = [];
+  const add = (idx, nome, tipo) => {
+    if (idx == null || idx < 0 || serie[idx] == null) return;
+    if (lista.some((c) => c.idx === idx)) return;
+    lista.push({ idx, tipo, rotulo: `${nome} · ${DADOS.anos[idx]}`, valor: `${fmt(serie[idx])}%` });
+  };
+  add(narr[r.criticoEm], r.critico, "critico");
+  add(narr[r.outroEm], r.outro, "outro");
+  return lista;
+}
+
+function textoLeituraAno(ctx, key, idx) {
+  const v = ctx.series[key][idx];
+  return v == null ? `${DADOS.anos[idx]}  ·  sem dados` : `${DADOS.anos[idx]}   ${fmt(v)}%`;
+}
+
+// Parede de 100 blocos do ano: titulo, blocos [concluidos, retidos, evadidos]
+// e as tres legendas.
+function textosParede(ctx, idx) {
+  const comp = composicaoDoAno(ctx, idx);
+  const titulo = `${DADOS.anos[idx]}  ·  1 bloco = 1%`;
+  if (!comp) return { titulo, blocos: null, comp: null, legendas: ["sem composição para este ano", "", ""] };
+  const ns = reparte100(comp);
+  return {
+    titulo,
+    blocos: ns,
+    comp,
+    legendas: [
+      `${ns[0]} concluíram  (${fmtInt(comp.brutos.concluidos)})`,
+      `${ns[1]} retidos  (${fmtInt(comp.brutos.retidos)})`,
+      `${ns[2]} evadiram  (${fmtInt(comp.brutos.evadidos)})`,
+    ],
+  };
+}
+
+function tituloMesa(key) {
+  const ind = indicadorByKey(key);
+  return `${rotulo(ind.label).toUpperCase()} EM ${DADOS.anos[DADOS.anos.length - 1]}   ·   1 BLOCO = 1%`;
+}
+
+function textoValorRegiao(v) {
+  return v == null ? "sem dados" : `${fmt(v)}%`;
+}
+
+// Nome curto do indicador nas colunas da mesa ("Eficiencia Academica" nao
+// cabe; "Eficiencia" identifica sozinha).
+function rotuloCurtoIndicador(ind) {
+  return rotulo(ind.label).replace("Taxa de ", "").split(" ")[0];
+}
+
+// Quantos blocos acender para um valor percentual: arredonda ao inteiro e
+// respeita o trilho de 100 (nunca estoura nem some com um valor > 0).
+function blocosPara(valor) {
+  if (valor == null) return 0;
+  return Math.max(valor > 0 ? 1 : 0, Math.min(100, Math.round(valor)));
+}
+
+function rotuloEvento(ev) {
+  return `${ev.ano} · Pandemia`;
+}
+
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { computeNarrative, anotacoes, composicaoDoAno, ultimoAnoComComposicao };
+  module.exports = { computeNarrative, anotacoes, composicaoDoAno, ultimoAnoComComposicao, rotulosCallout, reparte100,
+    calloutsDaSerie, textoLeituraAno, textosParede, tituloMesa, textoValorRegiao, rotuloCurtoIndicador, rotuloEvento, blocosPara, TEXTO_PAINEL_KICKER };
 }

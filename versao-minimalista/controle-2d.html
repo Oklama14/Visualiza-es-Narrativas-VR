@@ -3,33 +3,75 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Eficiencia Academica - Condicao 2D (controle do estudo)</title>
+<title>Camadas retóricas visíveis — condição 2D (controle do estudo)</title>
+<!--
+  CONDICAO 2D (controle do estudo). Os MESMOS dados, textos e ordem da condicao
+  imersiva (index.html), numa pagina plana: as tres camadas da sala viram tres
+  areas da pagina.
+    mesa ...... dados brutos: 5 regioes com 100 blocos (1 bloco = 1%) e os 4
+                indicadores do contexto em foco
+    painel .... a visualizacao da regiao escolhida: grafico anotado 2017-2024
+                e os 100 blocos do ano (para onde vao os alunos)
+    contexto .. as tres anotacoes narrativas (manchete, leitura, contexto)
+  Toda frase vem de js-ambiente/04-narrativa.js e as tarefas de
+  js-ambiente/07-tarefas.js - os mesmos arquivos da condicao imersiva. A
+  semantica tambem e a mesma: passar o mouse numa regiao poe ela em foco (como
+  o olhar); clicar abre o painel (como a pinca). tests/paridade-2d.js confere,
+  com as duas paginas abertas, que os textos exibidos sao identicos.
+-->
 <style>
-  :root { --bg:#070b16; --panel:#0b1322; --border:rgba(255,255,255,.14); --txt:#f4f8ff; --muted:#9fb2d0; --azul:#4cc9f0; }
+  :root { --bg:#070b16; --panel:#0b1322; --border:rgba(255,255,255,.14); --txt:#eaf2ff; --muted:#9fb2d6; --foco:#ffa23a; --verde:#1d9e75; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.5 Inter,ui-sans-serif,system-ui,sans-serif; }
-  .wrap { max-width:880px; margin:0 auto; padding:28px 20px 60px; }
+  .wrap { max-width:1180px; margin:0 auto; padding:24px 18px 64px; }
   .kicker { color:#87dcff; font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; }
-  h1 { margin:.2em 0 .1em; font-size:1.5rem; }
-  .sub { color:var(--muted); margin:0 0 18px; }
-  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px 18px; margin:14px 0; }
-  .selects { display:flex; gap:10px; flex-wrap:wrap; }
-  select, input[type=range] { background:#101a30; color:var(--txt); border:1px solid var(--border); border-radius:7px; padding:8px 10px; font:inherit; }
-  .manchete { font-size:1.15rem; font-weight:700; margin:4px 0 2px; }
-  .texto { color:var(--muted); margin:0; }
-  canvas { width:100%; height:auto; display:block; margin-top:10px; }
-  .readout { color:#9be7ff; margin-top:6px; min-height:1.4em; }
-  .comp-row { display:flex; align-items:center; gap:10px; margin:5px 0; }
-  .comp-ano { width:46px; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .comp-bar { flex:1; display:flex; height:20px; border-radius:4px; overflow:hidden; background:#16233c; }
-  .comp-bar div { height:100%; }
-  .leg { display:flex; gap:14px; margin-top:10px; color:var(--muted); font-size:.85rem; flex-wrap:wrap; }
-  .leg i { display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:5px; }
-  table { width:100%; border-collapse:collapse; margin-top:6px; }
-  td, th { padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.08); text-align:left; }
-  th { color:var(--muted); font-weight:600; font-size:.82rem; text-transform:uppercase; letter-spacing:.04em; }
-  .nota { color:var(--muted); font-size:.85rem; }
-  .brasil-row { color:#9be7ff; }
+  h1 { margin:.15em 0 .1em; font-size:1.45rem; }
+  .sub { color:var(--muted); margin:0 0 16px; }
+  .layout { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr); gap:16px; align-items:start; }
+  @media (max-width: 920px) { .layout { grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:0 0 16px; }
+  .camada { color:#7e92b4; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; margin:0 0 8px; }
+  .mesa-titulo { color:#6fa8e6; font-weight:600; letter-spacing:.04em; margin:0 0 10px; white-space:pre; }
+  .mapa { display:grid; grid-template-columns:1fr 1fr; grid-template-areas:"norte nordeste" "centro-oeste sudeste" "sul ."; gap:10px; }
+  .regiao { display:flex; gap:12px; align-items:center; border:1px solid rgba(29,158,117,.45); background:#0f2a24; border-radius:8px; padding:10px; cursor:pointer; outline:none; }
+  .regiao .grade { width:104px; flex:none; margin:0; }
+  .regiao.foco { border-color:#7fd4ff; background:#123a33; }
+  .regiao.aberta { border-color:var(--foco); background:#3b2a12; }
+  .regiao .nome { font-size:.8rem; letter-spacing:.06em; color:var(--muted); }
+  .regiao.aberta .nome { color:#ffd9a8; }
+  .regiao .valor { font-weight:700; font-size:1.15rem; margin-top:4px; }
+  .grade { display:grid; grid-template-columns:repeat(10, 1fr); gap:2px; margin-top:6px; max-width:150px; }
+  .grade i { display:block; aspect-ratio:1; border-radius:1px; background:#1c3346; }
+  .colunas { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-top:12px; }
+  .coluna { border:1px solid var(--border); border-radius:8px; padding:8px; background:#0e1a2b; cursor:pointer; text-align:center; outline:none; }
+  .coluna.ativa { border-color:var(--foco); box-shadow:0 0 0 1px var(--foco) inset; }
+  .coluna .grade { max-width:84px; margin:4px auto 0; }
+  .coluna .nome { font-size:.78rem; font-weight:600; }
+  .coluna .valor { font-size:.9rem; }
+  .painel-topo { height:4px; border-radius:2px; margin:-14px -16px 12px; }
+  .painel-cab { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .painel-kicker { color:#8b7fe8; font-size:.75rem; letter-spacing:.06em; }
+  .painel-titulo { font-size:1.2rem; font-weight:700; margin:2px 0; }
+  .painel-manchete { color:#c6d4ea; margin:0 0 8px; }
+  .fechar { background:#1a2436; color:#cfe0f4; border:1px solid var(--border); border-radius:50%; width:32px; height:32px; cursor:pointer; font:inherit; }
+  .painel-corpo { display:grid; grid-template-columns:minmax(0,1fr) 200px; gap:14px; align-items:start; }
+  @media (max-width: 640px) { .painel-corpo { grid-template-columns:1fr; } }
+  canvas { width:100%; display:block; }
+  .anos { display:grid; grid-template-columns:repeat(8, 1fr); gap:4px; margin-top:6px; }
+  .anos button { background:#101a30; color:var(--muted); border:1px solid var(--border); border-radius:6px; padding:4px 0; cursor:pointer; font:inherit; font-size:.85rem; }
+  .anos button.ativo { color:#fff; border-color:#7fd4ff; }
+  .readout { font-weight:700; margin-top:8px; white-space:pre; }
+  .parede-titulo { color:#7e92b4; font-size:.78rem; letter-spacing:.05em; text-align:center; }
+  .parede .grade { max-width:180px; margin:6px auto; }
+  .parede p { margin:2px 0; text-align:center; font-size:.85rem; white-space:pre; }
+  .ctx-bloco { border-left:4px solid var(--verde); background:#1b1f27; border-radius:6px; padding:10px 12px; margin-bottom:10px; }
+  .ctx-bloco .k { color:#7fd4ff; font-size:.72rem; letter-spacing:.06em; }
+  .ctx-bloco .t { font-weight:700; margin:2px 0 4px; }
+  .ctx-bloco .c { color:#c6d4ea; margin:0; }
+  .lateral { position:sticky; top:12px; }
+  .nota { color:var(--muted); font-size:.82rem; }
+  #legenda { position:sticky; top:0; z-index:20; display:none; background:#000c; border:1px solid #7b61ff; color:#fff; font-weight:600; padding:10px 14px; border-radius:8px; margin:0 0 12px; }
+  #legenda.visivel { display:block; }
   #studyPanel2d { position:fixed; right:14px; top:14px; z-index:30; width:250px; padding:12px 14px; background:rgba(8,13,24,.95); border:1px solid var(--border); border-left:3px solid #7b61ff; border-radius:10px; font-size:13px; }
   #studyPanel2d button { display:block; width:100%; margin-top:6px; padding:7px 10px; border-radius:7px; cursor:pointer; background:rgba(255,255,255,.08); color:#dfe9f6; border:1px solid rgba(255,255,255,.18); font:inherit; }
   #studyPanel2d button.destaque { background:#7b61ff; color:#fff; border:none; font-weight:700; }
@@ -37,350 +79,465 @@
 </head>
 <body>
 <div class="wrap">
-  <span class="kicker">Plataforma Nilo Pecanha · Rede Federal · CONDICAO 2D (controle)</span>
-  <h1>Eficiencia Academica da Rede Federal</h1>
-  <p class="sub">Os mesmos dados e textos da condicao imersiva, em pagina plana (2017-2024).</p>
+  <span class="kicker">Plataforma Nilo Peçanha · Rede Federal</span>
+  <h1 id="hudTitle">Camadas retóricas visíveis</h1>
+  <p class="sub" id="hudSubtitle">Eficiência acadêmica da Rede Federal · 2017–2024</p>
 
-  <div class="card">
-    <div class="selects">
-      <select id="selContexto" aria-label="Contexto"></select>
-      <select id="selIndicador" aria-label="Indicador"></select>
+  <div id="legenda" role="status" aria-live="polite"></div>
+
+  <div class="layout">
+    <div>
+      <section class="card" data-secao="mesa" aria-label="Camada de dados brutos">
+        <p class="camada">Camada de dados brutos · o mapa</p>
+        <p class="mesa-titulo" id="mesaValorTitulo"></p>
+        <div class="mapa" id="regioes"></div>
+        <div class="colunas" id="colunas"></div>
+        <p class="nota">Passe o mouse sobre uma região para pô-la em foco; clique para abrir a visualização dela. Os quatro quadros de baixo trocam o indicador.</p>
+      </section>
+
+      <section class="card" data-secao="painel" id="painel" hidden aria-label="Visualização da região">
+        <div class="painel-topo" id="painelTopo"></div>
+        <div class="painel-cab">
+          <div>
+            <div class="painel-kicker" id="painelKicker"></div>
+            <div class="painel-titulo" id="painelTitulo"></div>
+          </div>
+          <button class="fechar" id="painelFechar" type="button" aria-label="Fechar">x</button>
+        </div>
+        <p class="painel-manchete" id="painelManchete"></p>
+        <div class="painel-corpo">
+          <div>
+            <canvas id="grafico"></canvas>
+            <div class="anos" id="anos"></div>
+            <div class="readout" id="chartReadout"></div>
+          </div>
+          <div class="parede">
+            <div class="parede-titulo">PARA ONDE VÃO OS ALUNOS</div>
+            <div class="grade" id="parede"></div>
+            <p id="paredeAno"></p>
+            <p id="paredeLegConc" style="color:#3ad29f"></p>
+            <p id="paredeLegRet" style="color:#ffd166"></p>
+            <p id="paredeLegEvad" style="color:#ff6b6b"></p>
+          </div>
+        </div>
+      </section>
     </div>
-  </div>
 
-  <div class="card">
-    <p class="manchete" id="manchete"></p>
-    <p class="texto" id="narrativa"></p>
-    <canvas id="grafico" width="840" height="330"></canvas>
-    <input id="anoRange" type="range" min="0" max="7" step="1" value="7" style="width:100%" aria-label="Ano em foco" />
-    <div class="readout" id="readout"></div>
-    <p class="nota" id="notaLeitura">A linha mostra a tendencia; os marcadores destacam pico e melhor ano; a faixa vertical lembra a pandemia (2020).</p>
+    <aside class="lateral" data-secao="contexto" aria-label="Camada textual">
+      <section class="card">
+        <p class="camada">Camada textual · anotações narrativas</p>
+        <div id="contextoSlabs"></div>
+      </section>
+      <p class="nota">Fonte: Plataforma Nilo Peçanha / SETEC-MEC. Percentuais recalculados a partir de contagens brutas. Dados do IFRS podem conter inconsistências.</p>
+    </aside>
   </div>
-
-  <div class="card">
-    <p class="manchete">Para onde vao os alunos</p>
-    <p class="texto" id="compTexto"></p>
-    <div id="compRows"></div>
-    <div class="leg">
-      <span><i style="background:#3ad29f"></i>Concluiram</span>
-      <span><i style="background:#ffd166"></i>Retidos</span>
-      <span><i style="background:#ff6b6b"></i>Evadiram</span>
-    </div>
-  </div>
-
-  <div class="card">
-    <p class="manchete" id="tabTitulo"></p>
-    <table id="tabRegioes"></table>
-  </div>
-
-  <p class="nota">Fonte: Plataforma Nilo Pecanha / SETEC-MEC. Percentuais recalculados a partir de contagens brutas. Dados do IFRS podem conter inconsistencias (sinalizadas com *).</p>
 </div>
 
+<!-- Os mesmos modulos da condicao imersiva (sem nada de A-Frame). -->
+<script src="js-ambiente/01-telemetria.js?v=22" data-condicao="2d"></script>
+<script src="js-ambiente/02-base.js?v=22"></script>
+<script src="js-ambiente/04-narrativa.js?v=22"></script>
+<script src="js-ambiente/07-tarefas.js?v=22"></script>
 <script>
 (function () {
   "use strict";
   const params = new URLSearchParams(location.search);
   const modoEstudo = params.get("estudo") === "1";
-  const participante = params.get("p") || null;
-
-  // ---- telemetria-lite (mesmo formato da condicao imersiva; condicao "2d") ----
-  const eventos = [];
-  const t0 = performance.now();
-  const agora = () => Math.round(performance.now() - t0);
-  function tlog(tipo, dados) { if (modoEstudo) eventos.push(Object.assign({ t: agora(), tipo }, dados || {})); }
-  function exportar() {
-    const corpo = { app: "vrlab-versao-minimalista", condicao: "2d", participante, exportadoEm: new Date().toISOString(), duracaoMs: agora(), eventos };
-    const blob = new Blob([JSON.stringify(corpo)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `vrlab-2d-sessao-${Date.now()}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  }
-
-  const fmt = (v) => (v == null ? "-" : (Math.round(v * 10) / 10).toFixed(1).replace(".", ","));
-  const fmtInt = (n) => (n == null ? "-" : Math.round(n).toLocaleString("pt-BR"));
-
-  let DADOS = null;
-  let ctx = null;       // contexto selecionado
-  let indKey = "eficiencia";
-  let anoIdx = 7;
-
   const $ = (id) => document.getElementById(id);
+  const COMP_CORES = ["#3ad29f", "#ffd166", "#ff6b6b"];
+  const DWELL_IN = 140; // mesmos tempos do olhar na condicao imersiva
+  const DWELL_OUT = 260;
 
-  fetch("dados.json").then((r) => r.json()).then((d) => {
-    DADOS = d;
-    anoIdx = d.anos.length - 1;
-    montarSeletores();
-    ctx = d.brasil;
-    $("anoRange").max = String(d.anos.length - 1);
-    $("anoRange").value = String(anoIdx);
-    renderTudo();
-    if (modoEstudo) montarPainelEstudo();
-  });
+  // ---- legenda (o equivalente da legenda 3D: tarefa e avisos) ----
+  let legendaFixa = "";
+  let legendaTimer = null;
+  function legenda(texto, ms) {
+    const t = texto || legendaFixa;
+    $("legenda").textContent = t;
+    $("legenda").classList.toggle("visivel", !!t);
+    clearTimeout(legendaTimer);
+    if (texto && ms) legendaTimer = setTimeout(() => legenda(""), ms);
+  }
+  function fixarLegenda(texto) { legendaFixa = texto || ""; legenda(""); }
 
-  function todosContextos() {
-    const lista = [{ grupo: "Nacional", itens: [DADOS.brasil] }];
+  // ---- mesa ----------------------------------------------------------------
+  const regioesEls = {};
+  const colunaEls = {};
+
+  function grade(n, total, cor) {
+    let h = "";
+    for (let i = 0; i < total; i += 1) h += `<i style="${i < n ? `background:${cor}` : ""}"></i>`;
+    return h;
+  }
+
+  function buildMesa() {
     DADOS.regioes.forEach((r) => {
-      lista.push({ grupo: `Regiao ${r.nome}`, itens: [Object.assign({ _rotulo: `Regiao ${r.nome} (inteira)` }, r)].concat(r.instituicoes || []) });
+      const b = document.createElement("div");
+      b.className = "regiao";
+      b.tabIndex = 0;
+      b.style.gridArea = r.id;
+      b.dataset.regiao = r.id;
+      b.innerHTML = `<div class="grade"></div><div><div class="nome">${r.nome.toUpperCase()}</div><div class="valor"></div></div>`;
+      registrarAlvo(b);
+      $("regioes").appendChild(b);
+      regioesEls[r.id] = b;
     });
-    return lista;
-  }
-
-  function montarSeletores() {
-    const sc = $("selContexto");
-    todosContextos().forEach((g) => {
-      const og = document.createElement("optgroup");
-      og.label = g.grupo;
-      g.itens.forEach((c) => {
-        const o = document.createElement("option");
-        o.value = c.id;
-        o.textContent = (c._rotulo || c.sigla || c.nome) + (c.inconsistente ? " *" : "");
-        og.appendChild(o);
-      });
-      sc.appendChild(og);
-    });
-    sc.addEventListener("change", () => {
-      ctx = acharContexto(sc.value) || DADOS.brasil;
-      tlog("contexto", { id: ctx.id });
-      renderTudo();
-    });
-
-    const si = $("selIndicador");
     DADOS.indicadores.forEach((ind) => {
-      const o = document.createElement("option");
-      o.value = ind.key;
-      o.textContent = ind.label;
-      si.appendChild(o);
-    });
-    si.value = indKey;
-    si.addEventListener("change", () => { indKey = si.value; tlog("indicador", { key: indKey }); renderTudo(); });
-
-    $("anoRange").addEventListener("input", () => {
-      anoIdx = Number($("anoRange").value);
-      tlog("ano", { ano: DADOS.anos[anoIdx], indicador: indKey });
-      renderGrafico();
-      renderReadout();
-      renderComp();
+      const c = document.createElement("div");
+      c.className = "coluna";
+      c.tabIndex = 0;
+      c.dataset.indicador = ind.key;
+      c.innerHTML = `<div class="valor"></div><div class="nome" style="color:${ind.cor}">${rotuloCurtoIndicador(ind)}</div><div class="grade"></div>`;
+      registrarAlvo(c);
+      $("colunas").appendChild(c);
+      colunaEls[ind.key] = c;
     });
   }
 
-  function acharContexto(id) {
-    if (id === DADOS.brasil.id) return DADOS.brasil;
-    for (const r of DADOS.regioes) {
-      if (r.id === id) return r;
-      const i = (r.instituicoes || []).find((x) => x.id === id);
-      if (i) return i;
-    }
+  function updateMapa() {
+    const ind = indicadorByKey(state.indicadorKey);
+    DADOS.regioes.forEach((r) => {
+      const v = latestValue(r.series[state.indicadorKey]);
+      const b = regioesEls[r.id];
+      b.querySelector(".grade").innerHTML = grade(v == null ? 0 : blocosPara(v), 100, ind.cor);
+      b.querySelector(".valor").textContent = textoValorRegiao(v);
+    });
+    const ctxAtivo = contextoById(state.regiaoId || state.focoId) || DADOS.brasil;
+    DADOS.indicadores.forEach((i) => {
+      const c = colunaEls[i.key];
+      const v = latestValue(ctxAtivo.series[i.key]);
+      c.querySelector(".valor").textContent = v == null ? "-" : `${fmt(v)}%`;
+      c.querySelector(".grade").innerHTML = grade(v == null ? 0 : blocosPara(v), 100, i.cor);
+      c.classList.toggle("ativa", i.key === state.indicadorKey);
+    });
+    $("mesaValorTitulo").textContent = tituloMesa(state.indicadorKey);
+  }
+
+  function pintarFoco() {
+    Object.entries(regioesEls).forEach(([id, b]) => {
+      b.classList.toggle("foco", id === state.focoId && id !== state.regiaoId);
+      b.classList.toggle("aberta", id === state.regiaoId);
+    });
+  }
+
+  // ---- foco e confirmacao (mesma maquina de estados de 50-interacao.js) ----
+  let dwellIn = null;
+  let dwellOut = null;
+
+  function setFoco(id) {
+    if (state.focoId === id) return;
+    state.focoId = id;
+    pintarFoco();
+    updateMapa();
+    if (!state.painelAberto) updateContexto();
+    if (id) tlog("foco", { regiao: id });
+  }
+
+  function descreverAlvo(e) {
+    const d = e.dataset;
+    if (d.regiao) return `regiao:${d.regiao}`;
+    if (d.indicador) return `indicador:${d.indicador}`;
+    if (d.ano != null) return `ano:${d.ano}`;
+    if (d.acao) return `acao:${d.acao}`;
     return null;
   }
 
-  const indDef = () => DADOS.indicadores.find((i) => i.key === indKey);
-  const rotulo = () => ctx._rotulo || ctx.sigla || ctx.nome;
-
-  // ---- narrativa automatica (mesmas regras da condicao imersiva) ----
-  function narrativa() {
-    const ind = indDef();
-    const serie = ctx.series[indKey];
-    const anos = DADOS.anos;
-    const validos = serie.map((v, i) => ({ v, ano: anos[i], i })).filter((d) => d.v != null);
-    if (!validos.length) return { manchete: rotulo(), texto: `Sem dados de ${ind.label.toLowerCase()} para ${rotulo()}.` };
-
-    const a = validos[0], b = validos[validos.length - 1];
-    const diff = b.v - a.v;
-    const tend = diff > 2 ? "crescimento" : diff < -2 ? "reducao" : "estabilidade";
-    let pico = validos[0], vale = validos[0];
-    validos.forEach((d) => { if (d.v > pico.v) pico = d; if (d.v < vale.v) vale = d; });
-    const critico = ind.sentido === "negativo" ? pico : ind.sentido === "positivo" ? vale : pico;
-    const criticoNome = ind.sentido === "negativo" ? "pico critico" : ind.sentido === "positivo" ? "ponto critico" : "pico";
-    const verbo = diff > 2 ? "sobe" : diff < -2 ? "cai" : "se mantem";
-
-    const manchete = `${ind.label} em ${rotulo()} ${verbo} ${Math.abs(diff) > 2 ? fmt(Math.abs(diff)) + " pp" : ""} entre ${a.ano} e ${b.ano}`.replace(/\s+/g, " ");
-    let texto = `De ${fmt(a.v)}% em ${a.ano} para ${fmt(b.v)}% em ${b.ano}: ${tend}. O ${criticoNome} foi em ${critico.ano} (${fmt(critico.v)}%).`;
-    if (ctx.tipo !== "brasil") {
-      const bserie = DADOS.brasil.series[indKey];
-      if (bserieOk(bserie, b.i)) {
-        const d = b.v - bserie[b.i];
-        texto += ` Em ${b.ano}, ${fmt(Math.abs(d))} pp ${d >= 0 ? "acima" : "abaixo"} da media nacional.`;
+  function registrarAlvo(e) {
+    e.addEventListener("mouseenter", () => {
+      clearTimeout(dwellOut);
+      clearTimeout(dwellIn);
+      if (e.dataset.regiao) dwellIn = setTimeout(() => setFoco(e.dataset.regiao), DWELL_IN);
+    });
+    e.addEventListener("mouseleave", () => {
+      clearTimeout(dwellIn);
+      if (e.dataset.regiao) dwellOut = setTimeout(() => setFoco(null), DWELL_OUT);
+    });
+    const confirmarAqui = () => {
+      tlog("clique", { alvo: descreverAlvo(e) });
+      confirmar(e);
+    };
+    e.addEventListener("click", confirmarAqui);
+    e.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        confirmarAqui();
       }
+    });
+  }
+
+  function confirmar(e) {
+    const d = e.dataset;
+    if (d.regiao) abrirPainel(d.regiao);
+    else if (d.indicador) trocarIndicador(d.indicador);
+    else if (d.ano != null) { if (state.painelAberto) selecionarAno(Number(d.ano)); }
+    else if (d.acao === "fechar") fecharPainel();
+  }
+
+  function trocarIndicador(key) {
+    if (state.indicadorKey === key) return;
+    state.indicadorKey = key;
+    state.anoIdx = null;
+    tlog("indicador", { key });
+    updateMapa();
+    if (state.painelAberto) renderPainel();
+    updateContexto();
+  }
+
+  // ---- painel ---------------------------------------------------------------
+  function abrirPainel(id) {
+    state.regiaoId = id;
+    state.anoIdx = null;
+    setFoco(id);
+    renderPainel();
+    updateContexto();
+    updateMapa();
+    pintarFoco();
+    const jaAberto = state.painelAberto;
+    state.painelAberto = true;
+    $("painel").hidden = false;
+    if (!jaAberto) $("painel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    tlog("painel", { evento: "abrir", regiao: id });
+  }
+
+  function fecharPainel() {
+    if (!state.painelAberto) return;
+    state.painelAberto = false;
+    state.regiaoId = null;
+    state.anoIdx = null;
+    $("painel").hidden = true;
+    pintarFoco();
+    updateMapa();
+    updateContexto();
+    tlog("painel", { evento: "fechar" });
+  }
+
+  function renderPainel() {
+    const ctx = contextoById(state.regiaoId);
+    if (!ctx) return;
+    const ind = indicadorByKey(state.indicadorKey);
+    const narr = computeNarrative(ctx, state.indicadorKey);
+    $("painelKicker").textContent = TEXTO_PAINEL_KICKER;
+    $("painelTitulo").textContent = rotuloContexto(ctx);
+    $("painelManchete").textContent = narr.manchete;
+    $("painelTopo").style.background = ind.cor;
+    if (state.anoIdx == null) state.anoIdx = lastValidIndex(ctx.series[state.indicadorKey]);
+    renderAnos();
+    updateAno();
+  }
+
+  function renderAnos() {
+    const box = $("anos");
+    if (!box.children.length) {
+      DADOS.anos.forEach((ano, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = String(ano).slice(2);
+        b.setAttribute("aria-label", String(ano));
+        b.dataset.ano = String(i);
+        registrarAlvo(b);
+        box.appendChild(b);
+      });
     }
-    return { manchete, texto };
-  }
-  function bserieOk(s, i) { return s && s[i] != null; }
-
-  function renderTudo() {
-    const n = narrativa();
-    $("manchete").textContent = n.manchete;
-    $("narrativa").textContent = n.texto;
-    renderGrafico();
-    renderReadout();
-    renderComp();
-    renderTabela();
+    Array.from(box.children).forEach((b) => b.classList.toggle("ativo", Number(b.dataset.ano) === state.anoIdx));
   }
 
-  // ---- grafico anotado (canvas) ----
-  function renderGrafico() {
+  function selecionarAno(idx) {
+    state.anoIdx = clampIdx(idx, DADOS.anos.length);
+    tlog("ano", { ano: DADOS.anos[state.anoIdx], regiao: state.regiaoId, indicador: state.indicadorKey });
+    renderAnos();
+    updateAno();
+    updateContexto();
+  }
+
+  function updateAno() {
+    const ctx = contextoById(state.regiaoId);
+    if (!ctx) return;
+    const ind = indicadorByKey(state.indicadorKey);
+    $("chartReadout").textContent = textoLeituraAno(ctx, state.indicadorKey, state.anoIdx);
+    $("chartReadout").style.color = ind.cor;
+    desenharGrafico(ctx, ind);
+    const p = textosParede(ctx, state.anoIdx);
+    $("paredeAno").textContent = p.titulo;
+    $("paredeLegConc").textContent = p.legendas[0];
+    $("paredeLegRet").textContent = p.legendas[1];
+    $("paredeLegEvad").textContent = p.legendas[2];
+    let h = "";
+    if (p.blocos) p.blocos.forEach((n, k) => { for (let i = 0; i < n; i += 1) h += `<i style="background:${COMP_CORES[k]}"></i>`; });
+    $("parede").innerHTML = h;
+  }
+
+  // Grafico anotado (o mesmo conteudo do painel 3D: grade 0-100, linha do
+  // indicador, referencia nacional tracejada, ano em foco, os dois cartoes e
+  // a faixa do evento).
+  function desenharGrafico(ctx, ind) {
     const cv = $("grafico");
+    // Canvas no tamanho real da tela (texto nitido e do mesmo tamanho do resto
+    // da pagina, em qualquer largura).
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(320, cv.clientWidth || 640);
+    const H = Math.round(W * 0.48);
+    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    cv.style.height = H + "px";
     const g = cv.getContext("2d");
-    const ind = indDef();
-    const serie = ctx.series[indKey];
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const serie = ctx.series[state.indicadorKey];
     const anos = DADOS.anos;
-    const W = cv.width, H = cv.height, ML = 52, MR = 16, MT = 34, MB = 34;
+    const ML = 36, MR = 12, MT = 26, MB = 24;
     const X = (i) => ML + (i / (anos.length - 1)) * (W - ML - MR);
     const Y = (v) => H - MB - (v / 100) * (H - MT - MB);
-
     g.clearRect(0, 0, W, H);
-    g.font = "12px Inter, sans-serif";
+    g.font = "13px Inter, sans-serif";
     [0, 25, 50, 75, 100].forEach((p) => {
-      g.strokeStyle = p === 0 ? "#3f6796" : "#24405f";
+      g.strokeStyle = p === 0 ? "rgba(143,166,200,.4)" : "rgba(143,166,200,.14)";
       g.beginPath(); g.moveTo(ML, Y(p)); g.lineTo(W - MR, Y(p)); g.stroke();
-      g.fillStyle = "#7d93b4"; g.fillText(p + "%", 12, Y(p) + 4);
+      g.fillStyle = "#7e92b4"; g.textAlign = "right"; g.fillText(String(p), ML - 8, Y(p) + 4);
     });
-    anos.forEach((ano, i) => { g.fillStyle = i === anoIdx ? "#fff" : "#90a6c6"; g.fillText(String(ano), X(i) - 14, H - 12); });
+    g.textAlign = "center";
+    anos.forEach((ano, i) => { g.fillStyle = "#7e92b4"; g.fillText(String(ano).slice(2), X(i), H - 6); });
 
     (DADOS.eventos || []).forEach((ev) => {
       const i = anos.indexOf(ev.ano);
-      if (i < 0) return;
-      g.strokeStyle = "rgba(170,180,212,.4)";
-      g.setLineDash([4, 4]);
-      g.beginPath(); g.moveTo(X(i), MT - 6); g.lineTo(X(i), H - MB); g.stroke();
-      g.setLineDash([]);
-      g.fillStyle = "#aab4d4"; g.fillText(`${ev.ano} · ${ev.titulo || "Pandemia"}`, X(i) - 40, MT - 12);
+      if (i < 0 || serie[i] == null) return;
+      g.fillStyle = "rgba(255,209,102,.18)";
+      g.fillRect(X(i) - 4, MT, 8, H - MT - MB);
+      g.fillStyle = "#ffd166";
+      g.fillText(rotuloEvento(ev), X(i), MT - 8);
     });
 
-    // faixa do ano em foco
-    g.fillStyle = "rgba(76,201,240,.12)";
-    g.fillRect(X(anoIdx) - 14, MT, 28, H - MT - MB);
-
-    // linha + marcadores
-    g.strokeStyle = ind.cor; g.lineWidth = 2.5; g.beginPath();
-    let began = false;
-    serie.forEach((v, i) => { if (v == null) { began = false; return; } if (!began) { g.moveTo(X(i), Y(v)); began = true; } else g.lineTo(X(i), Y(v)); });
-    g.stroke(); g.lineWidth = 1;
+    const linha = (s, cor, largura, tracejado) => {
+      g.strokeStyle = cor; g.lineWidth = largura; g.setLineDash(tracejado ? [7, 6] : []);
+      g.beginPath();
+      let aberto = false;
+      s.forEach((v, i) => { if (v == null) { aberto = false; return; } if (!aberto) { g.moveTo(X(i), Y(v)); aberto = true; } else g.lineTo(X(i), Y(v)); });
+      g.stroke(); g.setLineDash([]); g.lineWidth = 1;
+    };
+    if (ctx.tipo !== "brasil") linha(DADOS.brasil.series[state.indicadorKey], "rgba(143,166,200,.5)", 1.5, true);
+    linha(serie, ind.cor, 3, false);
     serie.forEach((v, i) => {
       if (v == null) return;
-      g.fillStyle = ind.cor; g.beginPath(); g.arc(X(i), Y(v), i === anoIdx ? 6 : 4, 0, Math.PI * 2); g.fill();
+      g.fillStyle = ind.cor; g.beginPath(); g.arc(X(i), Y(v), i === state.anoIdx ? 7 : 4.5, 0, Math.PI * 2); g.fill();
+      if (i === state.anoIdx) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.arc(X(i), Y(v), 10, 0, Math.PI * 2); g.stroke(); g.lineWidth = 1; }
     });
 
-    // callouts pico/vale
-    const validos = serie.map((v, i) => ({ v, i })).filter((d) => d.v != null);
-    if (validos.length) {
-      let pico = validos[0], vale = validos[0];
-      validos.forEach((d) => { if (d.v > pico.v) pico = d; if (d.v < vale.v) vale = d; });
-      const marca = (d, nome, corTx) => { g.fillStyle = corTx; g.fillText(`${nome}: ${fmt(d.v)}%`, X(d.i) - 34, Y(d.v) - 12); };
-      if (ind.sentido === "negativo") { marca(pico, "Pico critico", "#ffb454"); marca(vale, "Melhor ano", "#65e4b8"); }
-      else { marca(vale, "Ponto critico", "#ffb454"); marca(pico, "Melhor ano", "#65e4b8"); }
-    }
-  }
-
-  function renderReadout() {
-    const serie = ctx.series[indKey];
-    const v = serie[anoIdx];
-    const ano = DADOS.anos[anoIdx];
-    const m = ctx.series.matriculas ? ctx.series.matriculas[anoIdx] : null;
-    const cont = ctx.series.contagens;
-    const NOUN = { evasao: "evadidos", conclusao: "concluintes", retencao: "retidos" };
-    let abs = "";
-    if (m && cont) {
-      const c = indKey === "evasao" ? cont.evadidos[anoIdx] : indKey === "conclusao" ? cont.concluidos[anoIdx] : indKey === "retencao" ? cont.retidos[anoIdx] : null;
-      abs = c == null ? ` · base de ${fmtInt(m)} matriculas` : ` · ${fmtInt(c)} ${NOUN[indKey]} de ${fmtInt(m)} matriculas`;
-    }
-    $("readout").textContent = v == null ? `${ano}: sem dados` : `${ano}: ${fmt(v)}%${abs}`;
-  }
-
-  function renderComp() {
-    const rows = $("compRows");
-    rows.innerHTML = "";
-    const cont = ctx.series.contagens;
-    const matr = ctx.series.matriculas;
-    if (!cont || !matr) { rows.textContent = "Sem dados de composicao."; return; }
-    DADOS.anos.forEach((ano, i) => {
-      const m = matr[i];
-      const row = document.createElement("div");
-      row.className = "comp-row";
-      const lb = document.createElement("span");
-      lb.className = "comp-ano";
-      lb.textContent = String(ano);
-      if (i === anoIdx) lb.style.color = "#fff";
-      const bar = document.createElement("div");
-      bar.className = "comp-bar";
-      if (m > 0) {
-        [["#3ad29f", cont.concluidos[i]], ["#ffd166", cont.retidos[i]], ["#ff6b6b", cont.evadidos[i]]].forEach(([cor, n]) => {
-          const seg = document.createElement("div");
-          seg.style.background = cor;
-          seg.style.width = ((n / m) * 100).toFixed(1) + "%";
-          bar.appendChild(seg);
-        });
-        if (i === anoIdx) bar.style.outline = "2px solid rgba(255,255,255,.5)";
-      }
-      row.append(lb, bar);
-      rows.appendChild(row);
+    const cards = calloutsDaSerie(ctx, state.indicadorKey);
+    cards.forEach((c, k) => {
+      const cor = c.tipo === "critico" ? "#ff9f6b" : "#7fd4ff";
+      const w = 132, h = 40;
+      const colide = k > 0 && Math.abs(X(c.idx) - X(cards[0].idx)) < w + 10;
+      const y = serie[c.idx];
+      let cy = colide ? Y(y) + 22 : Y(y) - 22 - h;
+      cy = Math.max(MT, Math.min(H - MB - h, cy));
+      const cx = Math.max(ML, Math.min(W - MR - w, X(c.idx) - w / 2));
+      g.fillStyle = "#081022"; g.fillRect(cx, cy, w, h);
+      g.fillStyle = cor; g.fillRect(cx, cy, w, 3);
+      g.fillStyle = cor; g.fillText(c.rotulo, cx + w / 2, cy + 18);
+      g.fillStyle = "#eaf2ff"; g.fillText(c.valor, cx + w / 2, cy + 34);
     });
-    const m = matr[anoIdx];
-    $("compTexto").textContent = m > 0
-      ? `${DADOS.anos[anoIdx]}: ${fmtInt(cont.concluidos[anoIdx])} concluintes · ${fmtInt(cont.retidos[anoIdx])} retidos · ${fmtInt(cont.evadidos[anoIdx])} evadidos, de ${fmtInt(m)} matriculas.`
-      : `${DADOS.anos[anoIdx]}: sem dados.`;
+    cv.dataset.callouts = JSON.stringify(cards.map((c) => [c.rotulo, c.valor]));
   }
 
-  function renderTabela() {
-    const ind = indDef();
-    $("tabTitulo").textContent = `${ind.label} por regiao (2024)`;
-    const linhas = [{ nome: "BRASIL", v: ult(DADOS.brasil.series[indKey]), brasil: true }]
-      .concat(DADOS.regioes.map((r) => ({ nome: r.nome, v: ult(r.series[indKey]) })));
-    linhas.sort((a, b) => (b.v ?? -1) - (a.v ?? -1));
-    $("tabRegioes").innerHTML = "<tr><th>Contexto</th><th>2024</th></tr>" +
-      linhas.map((l) => `<tr class="${l.brasil ? "brasil-row" : ""}"><td>${l.nome}</td><td>${fmt(l.v)}%</td></tr>`).join("");
-  }
-  function ult(s) { for (let i = s.length - 1; i >= 0; i -= 1) if (s[i] != null) return s[i]; return null; }
+  window.addEventListener("resize", () => { if (state.painelAberto) updateAno(); });
 
-  // ---- tarefas do estudo (identicas a condicao imersiva) ----
-  function montarPainelEstudo() {
-    const anos = DADOS.anos;
-    const bEv = DADOS.brasil.series.evasao;
-    let pico = 0;
-    bEv.forEach((v, i) => { if (v != null && (bEv[pico] == null || v > bEv[pico])) pico = i; });
-    const regioesEf = DADOS.regioes.map((r) => ({ nome: r.nome, v: ult(r.series.eficiencia) ?? -1 }));
-    const topEf = regioesEf.reduce((a, b) => (b.v > a.v ? b : a));
-    const i24 = anos.length - 1;
-    const pc = Math.round((DADOS.brasil.series.contagens.concluidos[i24] / DADOS.brasil.series.matriculas[i24]) * 100);
-    const faixaDe = (p) => (p < 20 ? "menos de 20" : p < 40 ? "20 a 39" : p < 60 ? "40 a 59" : p < 80 ? "60 a 79" : "80 ou mais");
-    const tarefas = [
-      { id: "T1", pergunta: "Em que ano a evasao do Brasil foi mais ALTA?", opcoes: anos.map(String), correta: String(anos[pico]) },
-      { id: "T2", pergunta: "Qual regiao tem a MAIOR eficiencia academica em 2024?", opcoes: DADOS.regioes.map((r) => r.nome), correta: topEf.nome },
-      { id: "T3", pergunta: "De cada 100 estudantes do Brasil (2024), quantos CONCLUIRAM?", opcoes: ["menos de 20", "20 a 39", "40 a 59", "60 a 79", "80 ou mais"], correta: faixaDe(pc) },
-    ];
+  // ---- camada textual (zona de contexto) -----------------------------------
+  function updateContexto() {
+    const ctx = contextoById(state.regiaoId || state.focoId);
+    const ind = indicadorByKey(state.indicadorKey);
+    const blocos = anotacoes(ctx, state.indicadorKey, state.anoIdx);
+    $("contextoSlabs").innerHTML = "";
+    blocos.forEach((b, i) => {
+      const d = document.createElement("div");
+      d.className = "ctx-bloco";
+      d.style.borderLeftColor = i === 0 ? ind.cor : "";
+      const k = document.createElement("div"); k.className = "k"; k.textContent = b.kicker;
+      const t = document.createElement("div"); t.className = "t"; t.textContent = b.titulo;
+      const c = document.createElement("p"); c.className = "c"; c.textContent = b.corpo;
+      d.append(k, t, c);
+      $("contextoSlabs").appendChild(d);
+    });
+  }
+
+  // ---- boot -----------------------------------------------------------------
+  fetch("dados.json").then((r) => r.json()).then((d) => {
+    DADOS = d;
+    buildMesa();
+    $("painelFechar").dataset.acao = "fechar";
+    registrarAlvo($("painelFechar"));
+    updateMapa();
+    updateContexto();
+    pintarFoco();
+    state.pronto = true;
+    tlog("boot", { ambiente: "controle-2d", dados: d.meta ? d.meta.gerado : null });
+    if (modoEstudo) iniciarEstudo();
+  });
+
+  // ---- modo estudo ------------------------------------------------------------
+  function iniciarEstudo() {
+    const pacote = gerarTarefas(DADOS);
+    const acharTarefa = (id) => {
+      const i = pacote.lista.findIndex((t) => t.id === id);
+      return i < 0 ? null : { t: pacote.lista[i], n: i + 1 };
+    };
+    const exibir = (id, origem) => {
+      const a = acharTarefa(id);
+      if (!a) return;
+      fixarLegenda(`TAREFA ${a.n}: ${a.t.pergunta}`);
+      tlog("tarefa", { id, evento: "exibida", origem });
+    };
+    const encerrar = (id, origem) => {
+      fixarLegenda("");
+      legenda("Resposta registrada. Obrigado!", 2500);
+      tlog("tarefa", { id: id || null, evento: "encerrada", origem });
+    };
+    // Comandos da estacao do pesquisador (mesmo canal da condicao imersiva).
+    if (window.Telemetry && Telemetry.aoComando) {
+      Telemetry.aoComando((c) => {
+        if (c.tipo === "tarefa-iniciar") exibir(c.id, "estacao");
+        else if (c.tipo === "tarefa-encerrar") encerrar(c.id, "estacao");
+        else if (c.tipo === "mensagem") legenda(String(c.texto || "").slice(0, 120), Math.min(20000, Number(c.ms) || 7000));
+      });
+    }
+    window.CONTROLE2D.tarefas = pacote;
+
+    // Painel local (?painel=local): so quando nao ha estacao do pesquisador.
+    // Ele fica na MESMA tela do participante - por isso nao e o padrao.
+    if (params.get("painel") !== "local") return;
     let atual = -1, andamento = false, tt0 = 0;
     const panel = document.createElement("div");
     panel.id = "studyPanel2d";
-    panel.innerHTML = `<div style="font-weight:700;color:#b8a9ff;font-size:11px;letter-spacing:.06em;text-transform:uppercase">Modo estudo (2D) · ${participante || "sem-id"}</div><div id="area2d" style="margin-top:8px"></div>`;
+    panel.innerHTML = `<div style="font-weight:700;color:#b8a9ff;font-size:11px;letter-spacing:.06em;text-transform:uppercase">Modo estudo (2D) · painel local · ${(Telemetry.participante || "sem-id")}</div><div id="area2d" style="margin-top:8px"></div>`;
     document.body.appendChild(panel);
     const area = panel.querySelector("#area2d");
     const botao = (rot, fn, d) => { const b = document.createElement("button"); if (d) b.className = "destaque"; b.textContent = rot; b.addEventListener("click", fn); return b; };
     function render() {
       area.innerHTML = "";
       if (andamento) {
-        const t = tarefas[atual];
+        const t = pacote.lista[atual];
         const p = document.createElement("div"); p.style.fontWeight = "600"; p.textContent = `${t.id}: ${t.pergunta}`; area.appendChild(p);
         t.opcoes.forEach((op) => area.appendChild(botao(op, () => {
-          tlog("tarefa", { id: t.id, evento: "resposta", resposta: op, correta: op === t.correta, tempoMs: Math.round(performance.now() - tt0) });
-          andamento = false; render();
+          const r = corrigirResposta(t, op);
+          tlog("tarefa", { id: t.id, evento: "resposta", resposta: op, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs: Math.round(performance.now() - tt0), origem: "painel-local" });
+          andamento = false; encerrar(t.id, "painel-local"); render();
         })));
         return;
       }
       const prox = atual + 1;
-      if (prox < tarefas.length) {
-        area.appendChild(botao(`Iniciar tarefa ${prox + 1} de ${tarefas.length}`, () => {
+      if (prox < pacote.lista.length) {
+        area.appendChild(botao(`Iniciar tarefa ${prox + 1} de ${pacote.lista.length}`, () => {
           atual = prox; andamento = true; tt0 = performance.now();
-          tlog("tarefa", { id: tarefas[atual].id, evento: "inicio" });
+          tlog("tarefa", { id: pacote.lista[atual].id, evento: "inicio", origem: "painel-local" });
+          exibir(pacote.lista[atual].id, "painel-local");
           render();
         }, true));
       } else {
-        const fim = document.createElement("div"); fim.style.color = "#8fe3c0"; fim.textContent = "Tarefas concluidas."; area.appendChild(fim);
-        area.appendChild(botao("Exportar sessao", exportar, true));
+        const fim = document.createElement("div"); fim.style.color = "#8fe3c0"; fim.textContent = "Tarefas concluídas."; area.appendChild(fim);
+        area.appendChild(botao("Exportar sessão", () => Telemetry.exportar(), true));
       }
     }
     render();
   }
+
+  // Handle de inspecao (testes e console), como o window.AMB da imersiva.
+  window.CONTROLE2D = { state, abrirPainel, fecharPainel, trocarIndicador, selecionarAno, setFoco };
 })();
 </script>
 </body>
