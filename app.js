@@ -65,6 +65,7 @@ const state = {
   tourScenes: null,   // A2: array de cenas da historia ativa
   history: [],        // pilha de navegacao: cada avanco empilha a tela atual; "Voltar" desempilha
   usingControllers: false, // VR: ha um controle Touch conectado (laser assume a mira)
+  vrInput: null, // VR: "controle" | "mao" | "olhar" (ver atualizarModoEntrada)
 };
 
 // ----------------------------------------------------------------------------
@@ -688,7 +689,7 @@ function closeMiniMap() {
   setEntityVisible(dom.miniMapContent, false);
   setEntityVisible(dom.miniMapTab, true);
   dom.miniMapContent.querySelectorAll(".minimap-region").forEach((e) => e.classList.remove("clickable"));
-  dom.miniMapBase.setAttribute("animation__pos", "property: position; to: 3.9 1.5 -3.1; dur: 200; easing: easeOutQuad");
+  dom.miniMapBase.setAttribute("animation__pos", "property: position; to: 3.9 2.7 -3.1; dur: 200; easing: easeOutQuad");
   dom.miniMapBase.setAttribute("animation__scale", "property: scale; to: 0.42 0.42 0.42; dur: 200; easing: easeOutQuad");
   refreshRaycasters();
 }
@@ -2097,18 +2098,31 @@ function setCaption(text) {
   if (dom.captionPanel) setEntityVisible(dom.captionPanel, text.length > 0);
 }
 
+// A legenda e o canal garantido; a voz e um extra. No navegador do Quest a
+// sintese de voz pode nao existir, falhar na hora (sem voz instalada) ou nunca
+// avisar que terminou - antes, a abertura guiada ficava parada no primeiro
+// momento. Agora: tempo minimo de leitura da legenda sempre respeitado, e um
+// vigia que encerra a frase se a voz nao disser nada.
 function narrateText(text, token) {
   return new Promise((resolve) => {
     if (token && token !== state.guidedToken) { resolve(); return; }
     
     const currentRunId = ++speechRunId;
     setCaption(text);
+    const leitura = Math.max(2500, text.length * 60); // tempo para LER a legenda
+    const inicio = Date.now();
+    let encerrado = false;
+    const encerrar = () => {
+      if (encerrado) return;
+      encerrado = true;
+      clearTimeout(vigia);
+      if (currentRunId === speechRunId) { setCaption(""); resolve(); }
+    };
+    const encerrarAposLeitura = () => setTimeout(encerrar, Math.max(0, leitura - (Date.now() - inicio)));
+    const vigia = setTimeout(encerrar, Math.max(8000, text.length * 130));
     
-    if (!window.speechSynthesis) {
-      const ms = Math.max(2500, text.length * 60);
-      setTimeout(() => { 
-        if (currentRunId === speechRunId) { setCaption(""); resolve(); }
-      }, ms);
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") {
+      encerrarAposLeitura();
       return;
     }
     
@@ -2117,11 +2131,19 @@ function narrateText(text, token) {
     utter.lang = "pt-BR";
     utter.rate = 1.0;
     
-    utter.onend = () => { if (currentRunId === speechRunId) { setCaption(""); resolve(); } };
-    utter.onerror = () => { if (currentRunId === speechRunId) { setCaption(""); resolve(); } };
+    let comecou = false;
+    utter.onstart = () => { comecou = true; };
+    utter.onend = encerrar;
+    utter.onerror = encerrarAposLeitura; // sem voz: a legenda segue no tempo de leitura
     
-    synth.cancel();
-    synth.speak(utter);
+    try {
+      synth.cancel();
+      synth.speak(utter);
+      // Voz que nem comeca (motor ausente, sem aviso de erro): segue pela legenda.
+      setTimeout(() => { if (!comecou) encerrarAposLeitura(); }, 1500);
+    } catch (e) {
+      encerrarAposLeitura();
+    }
   });
 }
 
@@ -2733,6 +2755,11 @@ function buildTourGallery() {
 
 function backToIndicators() {
   if (state.transitioning) return;
+  // O botao "Indicadores" e um voltar dentro da cena: consome a entrada que a
+  // ida para a linha do tempo/composicao empilhou. Sem isto, o "Voltar" global
+  // logo em seguida reabria a MESMA tela de indicadores (parecia nao funcionar).
+  const topo = state.history[state.history.length - 1];
+  if (topo && topo.stage === "indicators") state.history.pop();
   cancelGuided();
   stopNarration();
   state.stage = "indicators";
@@ -2940,14 +2967,30 @@ function setSubtreeClickable(root, enabled) {
 // VR / gaze.
 // ----------------------------------------------------------------------------
 
+// Tres jeitos de selecionar em VR, decididos pelo que o Quest esta rastreando
+// AGORA (session.inputSources), e nao por eventos soltos de cada componente:
+//   - "controle": controles Touch -> laser + gatilho; o olhar nao seleciona.
+//   - "mao":      hand tracking   -> o olhar mira, a PINCA seleciona (o
+//                 "select" do Quest vira clique no cursor de olhar); sem fuse,
+//                 para olhar parado nao selecionar sozinho.
+//   - "olhar":    nada rastreado  -> olhar + fuse (segurar 850 ms), como antes.
+// Antes: ao largar os controles, as maos apareciam, mas o laser ficava sem
+// controle e o olhar continuava desligado - nada mais era selecionavel.
 function bindVrCursorMode() {
   dom.scene.addEventListener("enter-vr", () => {
     resetCameraRig();                       // em VR o headset define a altura (rig y=0)
-    if (!state.usingControllers) setGazeFuse(true); // sem controle, usa o gaze
+    const sessao = dom.scene.xrSession;
+    if (sessao && !sessao.__vrlabEntradas) {
+      sessao.__vrlabEntradas = true;
+      sessao.addEventListener("inputsourceschange", () => atualizarModoEntrada());
+    }
+    atualizarModoEntrada(true);
     if (dom.vrHud) setEntityVisible(dom.vrHud, true); // HUD 2D some no headset -> mostra o 3D
     dismissOnboarding(); // overlay 2D nao aparece no headset; a placa #roomSign cobre VR
   });
   dom.scene.addEventListener("exit-vr", () => {
+    state.vrInput = null;
+    state.usingControllers = false;
     setGazeFuse(false);
     resetCameraRig();                       // desktop: volta a altura fixa (rig y=1.6)
     if (dom.vrHud) setEntityVisible(dom.vrHud, false); // desktop usa o HUD 2D
@@ -2968,33 +3011,43 @@ function resetCameraRig() {
   setVectorAttribute(dom.cameraRig, "position", emVR ? "0 0 0" : "0 1.6 0");
 }
 
-// Controles Touch do Quest: ligam o laser/gatilho quando conectam e desligam o gaze
-// (evita cursor duplicado). No desktop nunca conectam, entao ficam invisiveis e inertes.
-function bindControllers() {
-  const anyControllerConnected = () => ["rightHand", "leftHand"].some((id) => {
+// Le o que o Quest esta rastreando e aplica o modo de selecao (ver acima).
+// `entrando`: chamado pelo proprio enter-vr (o estado vr-mode pode ainda nao
+// estar marcado quando o evento e sintetico, como no smoke-test).
+function atualizarModoEntrada(entrando) {
+  if (!entrando && !dom.scene.is("vr-mode")) return;
+  const sessao = dom.scene.xrSession;
+  const fontes = sessao && sessao.inputSources ? Array.from(sessao.inputSources) : [];
+  const controles = fontes.filter((f) => !f.hand && f.gamepad);
+  const maos = fontes.filter((f) => !!f.hand);
+  const modo = controles.length ? "controle" : maos.length ? "mao" : "olhar";
+
+  state.vrInput = modo;
+  state.usingControllers = modo === "controle";
+  ["rightHand", "leftHand"].forEach((id) => {
     const h = document.getElementById(id);
-    const tc = h && h.components && h.components["tracked-controls"];
-    return !!(tc && tc.controller);
+    if (!h) return;
+    const lado = id === "rightHand" ? "right" : "left";
+    const ligado = modo === "controle" && controles.some((f) => f.handedness === lado);
+    setEntityVisible(h, ligado);
+    h.setAttribute("raycaster", "enabled", ligado);
   });
+  if (modo === "controle") setGazeFuse(false);
+  else if (modo === "mao") setGazeMode(true, false);
+  else setGazeFuse(true);
+  refreshRaycasters();
+}
+
+// Os componentes do A-Frame tambem avisam (controllerconnected/disconnected);
+// eles so disparam a releitura - quem decide e atualizarModoEntrada. O
+// inputsourceschange da sessao cobre a troca controle <-> mao, que nem sempre
+// gera "controllerdisconnected" a tempo.
+function bindControllers() {
   ["rightHand", "leftHand"].forEach((id) => {
     const hand = document.getElementById(id);
     if (!hand) return;
-    hand.addEventListener("controllerconnected", () => {
-      setEntityVisible(hand, true);
-      hand.setAttribute("raycaster", "enabled", true);
-      state.usingControllers = true;
-      setGazeFuse(false); // controle assume a mira
-      refreshRaycasters();
-    });
-    hand.addEventListener("controllerdisconnected", () => {
-      setEntityVisible(hand, false);
-      hand.setAttribute("raycaster", "enabled", false);
-      if (!anyControllerConnected()) {
-        state.usingControllers = false;
-        if (dom.scene.is("vr-mode")) setGazeFuse(true); // sem controle, volta ao gaze
-      }
-      refreshRaycasters();
-    });
+    hand.addEventListener("controllerconnected", () => atualizarModoEntrada());
+    hand.addEventListener("controllerdisconnected", () => atualizarModoEntrada());
   });
 }
 
@@ -3034,11 +3087,20 @@ function bindDragGuard() {
 }
 
 function setGazeFuse(isEnabled) {
-  dom.gazeCursor.setAttribute("cursor", { fuse: isEnabled, fuseTimeout: 850 });
-  dom.gazeCursor.setAttribute("raycaster", { enabled: isEnabled, far: 40, interval: 16, objects: ".clickable" });
-  dom.gazeCursor.setAttribute("material", "opacity", isEnabled ? 0.9 : 0.5);
+  setGazeMode(isEnabled, isEnabled);
+}
+
+// Olhar mirando (raycaster) e, separado, o fuse (selecionar segurando o olhar).
+// Com as maos o olhar mira mas NAO seleciona sozinho: quem confirma e a pinca.
+function setGazeMode(mira, fuse) {
+  dom.gazeCursor.setAttribute("cursor", { fuse: !!fuse, fuseTimeout: 850 });
+  dom.gazeCursor.setAttribute("raycaster", { enabled: !!mira, far: 40, interval: 16, objects: ".clickable" });
+  // O anel (#gazeRing) so aparece em VR com o olhar mirando: o componente
+  // reticulo-olhar (headset.js) cuida da visibilidade, profundidade e escala.
+  const anel = document.getElementById("gazeRing");
+  if (anel) anel.setAttribute("material", "opacity", mira ? 0.9 : 0.5);
   // O reticulo central so faz sentido em VR (gaze). No desktop o ponteiro e o mouse.
-  setEntityVisible(dom.gazeCursor, isEnabled);
+  setEntityVisible(dom.gazeCursor, !!mira);
   refreshRaycasters();
 }
 

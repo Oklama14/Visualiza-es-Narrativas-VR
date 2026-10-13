@@ -45,6 +45,13 @@ compreensao de evasao, conclusao, eficiencia e retencao ao longo do tempo.
   (martini glass), navegacao por ano, comparacao, narracao e controle de clickables.
 - `styles.css`: HUD 2D, legenda de comparacao, vinheta cinematografica e overlay de transicao.
 - `tests/smoke-test.js`: teste automatizado (Chrome/Edge headless + Chrome DevTools Protocol).
+- `headset.js`: so do Quest 2, carregado ANTES do `app.js` - perfil do renderer pela URL
+  (`?hz=90 ?aa=0 ?fov=0..1 ?fps=1`), componentes `sobrepor` (reticulo/legenda/HUD de VR por
+  cima do mundo), `reticulo-olhar` (anel na profundidade do alvo + enchimento do fuse),
+  `maos-locais` (modelo das maos em `assets/maos/`, offline) e `medidor-fps`; aviso de HTTPS.
+- `server.js`: servidor estatico sem dependencias. `node server.js --quest` serve HTTPS na
+  rede (certificado autoassinado gerado em `.certs/`, nunca servido) para o navegador do Quest.
+- `tests/quest-sim.js`: Quest 2 emulado (IWER + Playwright), ver "Como testar".
 
 Estetica: ambiente escuro cinematografico (sky escuro, fog para profundidade, aneis no
 piso, brilho-spotlight com a cor do indicador e vinheta 2D). A geometria do grafico fica
@@ -66,6 +73,12 @@ python -m http.server 4173 --bind 127.0.0.1
 
 Depois abrir `http://127.0.0.1:4173/`. Rodar por `localhost`/`127.0.0.1` e melhor que abrir
 o HTML direto (necessario para `fetch` do `dados.json` e para WebXR).
+
+No Meta Quest 2 (navegador do headset, pela rede Wi-Fi): `node server.js --quest` e abrir o
+`https://<ip-do-pc>:4443/` que ele imprime (1a vez: "Avancado" -> "Continuar"). WebXR so existe
+em contexto seguro: por `http://192.168...` o botao VR vira tela cheia 2D sem erro (a pagina
+mostra um aviso). O A-Frame tem copia local em `assets/aframe-1.5.0.min.js`, mas as fontes
+(`kelsonsans`) vem de cdn.aframe.io: sem internet, o texto 3D nao aparece.
 
 ## Como testar
 
@@ -105,7 +118,8 @@ O smoke test cobre:
 - navegacao por ano (botoes < e >);
 - modo comparacao (regiao vs Brasil) com legenda;
 - "Reproduzir" reinicia a abertura guiada;
-- retorno indicadores -> selecao e fluxo direto do Brasil;
+- "Voltar" retorna a tela anterior (indicadores -> drill de onde vieram -> mapa) e fluxo
+  direto do Brasil;
 - clickables ativos apenas no modo visivel;
 - cursor gaze ativando fuse ao entrar em VR e desligando ao sair.
 
@@ -121,6 +135,15 @@ comparar regioes -> 3 tours -> drill, conferindo estado, textos gerados e clicka
 fantasmas (elemento invisivel com `.clickable`) em cada transicao. Instale so para testar:
 `npm install --no-save jsdom` e rode `node .\tests\flow-check.js` (sem o jsdom ele se
 auto-pula). E o teste mais proximo do smoke-test que roda sem Chrome.
+
+Ha `tests/quest-sim.js` (Playwright + IWER, a emulacao de WebXR da Meta, como Meta Quest 2 e
+com a internet bloqueada): entra numa sessao imersiva de verdade e confere cabeca a 1,6 m,
+perfil do renderer, maos (modelo local; 1 pinca = 1 clique; olhar parado com as maos a vista
+NAO seleciona), controles (1 gatilho = 1 clique no alvo do laser), mao que some ao pegar o
+controle, alcance do olhar e conforto (angulos de cada alvo clicavel por etapa; `--angulos`
+imprime a tabela), reticulo/legenda/HUD por cima do mundo, abertura guiada com voz muda,
+"Voltar" apos "Indicadores", draw calls e console. `npm i -D playwright iwer` e
+`node .\tests\quest-sim.js` (precisa de `assets/aframe-1.5.0.min.js`).
 
 Ha ainda `tests/layout-check.js` (sem navegador): projeta os blocos de texto/painel de
 cada etapa no espaco de tela (camera 0 1.6 0, FOV vertical 80) e acusa sobreposicao
@@ -227,9 +250,21 @@ paineis de texto, e dentro da timeline os botoes sumiam justamente nessas cenas.
 ## Desktop vs VR
 
 No desktop: `a-scene` usa `cursor="rayOrigin: mouse; fuse: false"` e o gaze fica com raycaster desativado.
-O reticulo central (`#gazeCursor`) fica oculto no desktop (so aparece em VR via `setGazeFuse`).
-Em VR: `enter-vr`/`exit-vr` chamam `setGazeFuse`, ligando fuse, raycaster e visibilidade do gaze.
+O reticulo central (`#gazeCursor` + o anel filho `#gazeRing`) fica oculto no desktop.
 Importante: nao deixar mouse e gaze ativos simultaneamente no desktop.
+
+Em VR, `atualizarModoEntrada` le `session.inputSources` (no `enter-vr`, no `inputsourceschange`
+da sessao e nos `controllerconnected/disconnected`) e escolhe UM modo de selecao:
+- `controle` (Touch): laser + gatilho (`#rightHand`/`#leftHand`); o gaze nao mira.
+- `mao` (hand tracking): o gaze mira, a PINCA seleciona (o `select` do Quest vira clique no
+  cursor de olhar), SEM fuse - olhar parado nao seleciona. Maos visiveis em
+  `#handLeftTrack`/`#handRightTrack` (`hand-tracking-controls` + `maos-locais`).
+- `olhar` (nada rastreado): gaze + fuse 850 ms (`setGazeFuse(true)`), como antes.
+`setGazeMode(mira, fuse)` separa mirar de selecionar; `setGazeFuse(x)` = `setGazeMode(x, x)`.
+O raio do gaze sai do olho (`origin: 0 0 1` no raycaster, que desfaz o `-1` da entidade).
+Antes, ao largar os controles, as maos apareciam mas nada era selecionavel (o laser ficava
+sem controle e o gaze continuava desligado). Nao voltar a decidir o modo so por eventos de
+componente: a troca controle <-> mao nem sempre gera `controllerdisconnected` a tempo.
 
 Clique deliberado: no desktop o giro por mouse fica DESATIVADO (`look-controls` com
 `mouseEnabled: false`), entao mover o mouse so aponta (hover) e somente um clique entra.
@@ -283,6 +318,13 @@ Os objetos ficam apoiados no piso (y=0). Nao recolocar os planos gigantes de pis
   em vez de deixar um botao ativo que nao faz nada.
 - Legendas de narracao: `setCaption` escreve em `#captionText` (o id precisa estar na
   lista de `dom`, senao o painel aparece vazio).
+- Narracao (`narrateText`): a legenda e o canal garantido, a voz e extra. Se a sintese nao
+  comecar em 1,5 s ou der erro, a frase segue pelo tempo de leitura da legenda; um vigia encerra
+  a frase se `onend` nunca vier. No navegador do Quest a voz pode nao existir - antes, a
+  abertura guiada ficava parada no primeiro momento.
+- Historico: `backToIndicators` (botoes "Indicadores" da linha do tempo e da composicao)
+  consome a entrada `indicators` do topo da pilha. Sem isso, o "Voltar" global logo depois
+  reabria a mesma tela de indicadores.
 - A abertura guiada usa `state.guidedToken`: ao sair da timeline ou pular, o token e
   incrementado e o loop assincrono para. Sempre incremente o token antes de trocar de etapa.
 - Geometria do grafico centralizada em `CHART`; helpers `xFor(i)`/`yFor(v)` convertem
@@ -311,7 +353,9 @@ headset). A placa `#roomSign` na sala resume os controles tambem para VR.
 - Depois de mexer em texto/posicao de painel, rode `node .\tests\layout-check.js` (0 falhas
   e, de preferencia, 0 avisos).
 - Depois de mexer em fluxo/estado/interacao, rode `node .\tests\flow-check.js`.
-- Ao alterar `app.js` ou `styles.css`, suba o `?v=N` no `index.html` (cache do navegador).
+- Ao alterar `app.js`, `headset.js` ou `styles.css`, suba o `?v=N` no `index.html` (cache do
+  navegador). O `node server.js` ja manda `Cache-Control: no-store`.
+- Depois de mexer em VR (cursor, maos, controles, posicao de alvos), rode `node .\tests\quest-sim.js`.
 - Se alterar posicoes/tamanhos/hitboxes, verifique se os cliques nao acertam objetos vizinhos
   e se os controles continuam dentro do campo de visao.
 - Banda segura da tela: mantenha os blocos entre ~20% e ~74% da altura. Acima disso fica o

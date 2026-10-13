@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050711'/%3E%3Ccircle cx='32' cy='32' r='18' fill='%2355d6ff'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=13" />
+    <link rel="stylesheet" href="styles.css?v=14" />
     <!-- A-Frame (cena 3D, WebXR, camera, cursor, raycaster).
          Tenta a copia LOCAL (funciona offline); se ela nao existir/falhar,
          cai automaticamente no CDN. Para ativar o modo offline, baixe o
@@ -22,6 +22,15 @@
   </head>
   <body>
     <div id="transitionOverlay" aria-hidden="true"></div>
+
+    <!-- Aparece quando a pagina foi aberta por HTTP fora do localhost: nesse caso
+         o navegador (inclusive o do Quest) esconde o WebXR e o botao VR vira tela
+         cheia 2D, sem erro nenhum. Ver headset.js. -->
+    <div class="aviso-https" id="avisoHttps" role="alert" hidden>
+      <strong>O modo VR esta bloqueado nesta pagina.</strong>
+      <span>O navegador so libera o WebXR por <b>HTTPS</b> (ou em localhost). No PC, rode
+        <code>node server.js --quest</code> e abra no Quest o endereco <code>https://…:4443</code> que ele mostrar.</span>
+    </div>
     <div class="vignette" aria-hidden="true"></div>
 
     <!-- Indicador de carregamento: cobre a cena ate dados + A-Frame prontos. -->
@@ -71,7 +80,7 @@
         <ul>
           <li><strong>Desktop:</strong> arraste com o mouse para olhar ao redor e <strong>clique</strong> num card ou objeto para escolher.</li>
           <li><strong>Explorar:</strong> passe o mouse sobre um medidor para ver a explicacao; clique para abrir a linha do tempo.</li>
-          <li><strong>VR:</strong> toque em <em>Enter VR</em>, mire com o olhar (reticulo) e <strong>segure</strong> para selecionar.</li>
+          <li><strong>VR:</strong> toque em <em>VR</em>. Com <strong>controles</strong>, aponte o laser e aperte o gatilho. Com as <strong>maos</strong>, mire com o olhar (reticulo) e <strong>belisque</strong> (polegar + indicador, palma virada para fora). Sem maos nem controles, mire e <strong>segure</strong> o olhar.</li>
         </ul>
         <button id="onboardStart" type="button">Comecar</button>
         <p class="onboard-foot">Voce pode rever isto no botao "?" no canto.</p>
@@ -79,9 +88,13 @@
     </div>
     <button class="help-btn" id="helpBtn" type="button" aria-label="Rever ajuda">?</button>
 
+    <!-- renderer: valores para o Quest 2. No A-Frame, foveationLevel 1 e a foveacao
+         MAXIMA (borra o texto da periferia); 0,5 e o meio-termo. 72 Hz estaveis em
+         vez de 90 Hz que podem perder quadro. Para comparar no headset sem editar
+         nada, use a URL: ?hz=90  ?aa=0  ?fov=0..1  ?fps=1 (ver headset.js). -->
     <a-scene
       id="scene"
-      renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true; exposure: 1.1; foveationLevel: 1; highRefreshRate: true"
+      renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true; exposure: 1.1; foveationLevel: 0.5; highRefreshRate: false"
       cursor="rayOrigin: mouse; fuse: false"
       raycaster="objects: .clickable; far: 40; interval: 16"
       fog="type: linear; color: #070b16; near: 11; far: 34"
@@ -93,7 +106,7 @@
           id="softText"
           text="font: kelsonsans; align: center; anchor: center; baseline: center"
         ></a-mixin>
-        <img id="mapImgAsset" src="assets/mapa-brasil.png?v=13" crossorigin="anonymous" />
+        <img id="mapImgAsset" src="assets/mapa-brasil.png?v=14" crossorigin="anonymous" />
       </a-assets>
 
       <!-- Camera compartilhada: mouse no desktop e cursor gaze em VR. -->
@@ -104,17 +117,27 @@
           look-controls="pointerLockEnabled: false; mouseEnabled: false"
           wasd-controls="acceleration: 16"
         >
-          <a-cursor
+          <!-- Cursor de olhar (so em VR). O raio sai do OLHO: "origin 0 0 1"
+               desfaz o -1 da entidade (antes ele nascia 1 m a frente). O anel
+               visivel e o filho #gazeRing: o componente reticulo-olhar (headset.js)
+               leva o anel ate o ponto mirado, enche durante o fuse e o desenha por
+               cima de tudo. Com as maos, quem seleciona e a pinca (sem fuse). -->
+          <a-entity
             id="gazeCursor"
-            visible="false"
             position="0 0 -1"
-            geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.02"
-            material="color: #ffffff; shader: flat; opacity: 0.88"
-            raycaster="enabled: false; objects: .clickable; far: 40; interval: 16"
-            cursor="fuse: false; fuseTimeout: 850"
-            animation__fusing="property: scale; startEvents: fusing; easing: easeInCubic; dur: 850; from: 1 1 1; to: 1.75 1.75 1.75"
-            animation__reset="property: scale; startEvents: mouseleave; dur: 140; to: 1 1 1"
-          ></a-cursor>
+            raycaster="enabled: false; objects: .clickable; far: 40; interval: 16; origin: 0 0 1"
+            cursor="fuse: false; fuseTimeout: 850; rayOrigin: entity"
+            reticulo-olhar
+          >
+            <a-ring
+              id="gazeRing"
+              visible="false"
+              radius-inner="0.012"
+              radius-outer="0.02"
+              material="color: #ffffff; shader: flat; opacity: 0.9; transparent: true; depthTest: false"
+              sobrepor="ordem: 40"
+            ></a-ring>
+          </a-entity>
 
           <!-- Plano escuro acoplado a camera para fade tambem aparecer em headset VR. -->
           <a-plane
@@ -124,26 +147,39 @@
             height="1.4"
             visible="false"
             material="shader: flat; color: #02040a; opacity: 0; transparent: true; depthTest: false"
+            sobrepor="ordem: 50"
           ></a-plane>
 
           <!-- Painel de Legenda (HUD) -->
+          <!-- sobrepor (headset.js): por cima do mundo, senao some atras do que
+               estiver a menos de 1 m do rosto. -->
           <a-entity id="captionPanel" position="0 -0.4 -1" visible="false">
-            <a-plane width="1.4" height="0.16" material="color: #000000; opacity: 0.65; transparent: true; shader: flat"></a-plane>
-            <a-text id="captionText" value="" position="0 0 0.01" width="1.3" align="center" color="#ffffff" font="kelsonsans" wrap-count="60"></a-text>
+            <a-plane width="1.4" height="0.16" material="color: #000000; opacity: 0.65; transparent: true; shader: flat" sobrepor="ordem: 30"></a-plane>
+            <a-text id="captionText" value="" position="0 0 0.01" width="1.3" align="center" color="#ffffff" font="kelsonsans" wrap-count="60" sobrepor="ordem: 31"></a-text>
           </a-entity>
 
           <!-- HUD de contexto para VR: o HUD 2D (breadcrumb + nota "Como ler") nao
                aparece no headset, entao espelhamos o essencial aqui, fixo a camera na
                base do campo de visao. Visivel apenas em VR (ligado em enter-vr). -->
           <a-entity id="vrHud" position="0 -0.66 -1.15" visible="false">
-            <a-plane width="1.46" height="0.5" material="color: #0a1220; opacity: 0.82; transparent: true; shader: flat"></a-plane>
-            <a-plane width="1.46" height="0.014" position="0 0.235 0.002" material="color: #4cc9f0; opacity: 0.7; transparent: true; shader: flat"></a-plane>
-            <a-text id="vrCrumb" value="" position="-0.69 0.18 0.01" width="1.7" align="left" anchor="left" color="#8fb3dd" font="kelsonsans" wrap-count="52"></a-text>
-            <a-text id="vrNotaKicker" value="COMO LER" position="-0.69 0.075 0.01" width="1.9" align="left" anchor="left" color="#87dcff" font="kelsonsans"></a-text>
-            <a-text id="vrNotaTitle" value="" position="-0.69 -0.01 0.01" width="1.5" align="left" anchor="left" color="#ffffff" font="kelsonsans" wrap-count="42"></a-text>
-            <a-text id="vrNotaBody" value="" position="-0.69 -0.13 0.01" width="1.42" align="left" anchor="left" color="#b9c8de" font="kelsonsans" wrap-count="50"></a-text>
+            <a-plane width="1.46" height="0.5" material="color: #0a1220; opacity: 0.82; transparent: true; shader: flat" sobrepor="ordem: 20"></a-plane>
+            <a-plane width="1.46" height="0.014" position="0 0.235 0.002" material="color: #4cc9f0; opacity: 0.7; transparent: true; shader: flat" sobrepor="ordem: 21"></a-plane>
+            <a-text id="vrCrumb" value="" position="-0.69 0.18 0.01" width="1.7" align="left" anchor="left" color="#8fb3dd" font="kelsonsans" wrap-count="52" sobrepor="ordem: 22"></a-text>
+            <a-text id="vrNotaKicker" value="COMO LER" position="-0.69 0.075 0.01" width="1.9" align="left" anchor="left" color="#87dcff" font="kelsonsans" sobrepor="ordem: 22"></a-text>
+            <a-text id="vrNotaTitle" value="" position="-0.69 -0.01 0.01" width="1.5" align="left" anchor="left" color="#ffffff" font="kelsonsans" wrap-count="42" sobrepor="ordem: 22"></a-text>
+            <a-text id="vrNotaBody" value="" position="-0.69 -0.13 0.01" width="1.42" align="left" anchor="left" color="#b9c8de" font="kelsonsans" wrap-count="50" sobrepor="ordem: 22"></a-text>
           </a-entity>
+
+          <!-- Medidor de quadros (so com ?fps=1): fps real do headset e draw calls. -->
+          <a-text id="fpsTexto" value="" visible="false" position="-0.3 0.3 -1" width="0.5" wrap-count="16" align="left" color="#9dffb0" font="kelsonsans" sobrepor="ordem: 32"></a-text>
         </a-entity>
+
+        <!-- Maos (hand tracking do Quest): so o modelo visivel - quem mira e o
+             olhar e quem seleciona e a pinca (o "select" do proprio Quest, que o
+             cursor de olhar transforma em clique). maos-locais: o modelo vem de
+             assets/maos/, sem depender de internet. -->
+        <a-entity id="handLeftTrack" hand-tracking-controls="hand: left; modelStyle: mesh; modelColor: #7fd4ff" maos-locais></a-entity>
+        <a-entity id="handRightTrack" hand-tracking-controls="hand: right; modelStyle: mesh; modelColor: #7fd4ff" maos-locais></a-entity>
 
         <!-- Controles Touch do Quest (laser + gatilho). Invisiveis e com raycaster
              desligado por padrao; ligam quando um controle conecta (so em VR),
@@ -581,7 +617,10 @@
 
 
         <!-- Mini-mapa Dinamico (Contexto Fluido) -->
-        <a-entity id="miniMapBase" position="3.9 1.5 -3.1" rotation="0 -30 0" scale="0.42 0.42 0.42">
+        <!-- y 2,7 (antes 1,5): na altura antiga a aba ficava ATRAS da caixa de clique
+             do medidor da direita - mirando o centro dela (mouse ou olhar), quem
+             recebia o clique era o medidor, que abria a linha do tempo. -->
+        <a-entity id="miniMapBase" position="3.9 2.7 -3.1" rotation="0 -30 0" scale="0.42 0.42 0.42">
           <!-- Aba recolhida (sempre visivel; abre o mapa sob demanda). -->
           <a-entity id="miniMapTab">
             <a-box class="minimap-clickable" width="2.6" height="0.55" depth="0.06" material="color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
@@ -643,6 +682,7 @@
       </a-entity>
     </a-scene>
 
-    <script src="app.js?v=13"></script>
+    <script src="headset.js?v=14"></script>
+    <script src="app.js?v=14"></script>
   </body>
 </html>

@@ -400,11 +400,22 @@ async function assertIndicatorsAndTimeline(cdp) {
     "retorno aos indicadores"
   );
 
-  // Voltar para a selecao.
+  // "Voltar" retorna a tela ANTERIOR (historico de navegacao), nao ao mapa:
+  // aqui os indicadores vieram do drill, entao volta ao drill. O botao
+  // "Indicadores" da linha do tempo consome a propria entrada do historico -
+  // sem isso, este "Voltar" reabria os mesmos indicadores.
   await clickProjected(cdp, "#backButton .exploration-clickable.clickable", 0);
   await waitFor(
     cdp,
-    "!state.transitioning && state.stage === 'selection' && document.querySelector('#selectionWorld')?.object3D.visible && !document.querySelector('#explorationWorld')?.object3D.visible",
+    "!state.transitioning && state.stage === 'drill' && document.querySelector('#selectionWorld')?.object3D.visible && !document.querySelector('#explorationWorld')?.object3D.visible && document.querySelectorAll('#drillCards .drill-clickable.clickable').length > 0",
+    "Voltar dos indicadores retorna ao drill de onde vieram"
+  );
+
+  // Do drill, o voltar do proprio drill leva ao mapa.
+  await clickProjected(cdp, "#drillBack .drill-clickable.clickable", 0);
+  await waitFor(
+    cdp,
+    "!state.transitioning && state.stage === 'selection' && document.querySelector('#mapView')?.object3D.visible",
     "retorno para selecao apos indicadores"
   );
 }
