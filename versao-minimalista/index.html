@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Camadas Retóricas Visíveis — Ambiente VR Narrativo</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050711'/%3E%3Crect x='14' y='22' width='36' height='26' rx='3' fill='%231d9e75'/%3E%3Crect x='18' y='10' width='28' height='8' rx='2' fill='%238b7fe8'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="styles.css?v=20" />
+    <!-- A-Frame: tenta a copia LOCAL (offline) e cai no CDN se ela nao existir. -->
+    <script src="assets/aframe-1.5.0.min.js"></script>
+    <script>
+      if (!window.AFRAME) {
+        document.write('<scr' + 'ipt src="https://aframe.io/releases/1.5.0/aframe.min.js"><\/scr' + 'ipt>');
+      }
+    </script>
+  </head>
+  <body>
+    <div id="transitionOverlay" aria-hidden="true"></div>
+
+    <div class="loading-overlay" id="loadingOverlay" role="status" aria-live="polite">
+      <div class="loading-card">
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <span class="loading-text" id="loadingText">Montando o ambiente…</span>
+      </div>
+    </div>
+
+    <!-- HUD 2D: existe apenas no monitor espelhado. Dentro do headset o unico
+         canal de texto e a legenda 3D (#captionPanel). -->
+    <main class="screen-frame" aria-label="Ambiente VR narrativo">
+      <div class="hud-left">
+        <div class="brand-panel">
+          <span class="brand-kicker">Plataforma Nilo Peçanha &middot; Rede Federal</span>
+          <strong id="hudTitle">Camadas retóricas visíveis</strong>
+          <span id="hudSubtitle">Eficiência acadêmica 2017–2024</span>
+        </div>
+      </div>
+      <aside class="nota-panel" id="notaPanel" aria-label="Como ler este ambiente">
+        <span class="nota-kicker">Como ler este ambiente</span>
+        <strong id="notaTitle"></strong>
+        <p id="notaBody"></p>
+      </aside>
+    </main>
+
+    <div class="onboard-overlay" id="onboardOverlay" hidden>
+      <div class="onboard-card" role="dialog" aria-label="Como usar">
+        <span class="onboard-kicker">Ambiente VR narrativo</span>
+        <h2>Três ações</h2>
+        <p class="onboard-sub">Uma sala, três camadas: o dado bruto na mesa, a visualização no ar, o texto na parede ao lado.</p>
+        <ol class="onboard-steps">
+          <li><strong>Entre no ambiente.</strong> Você nasce na porta; caminhe (ou mire o disco no piso e confirme) até a marca em frente ao mapa.</li>
+          <li><strong>Olhe para uma região do mapa.</strong> O olhar é que põe a região em foco — nada é selecionado sozinho.</li>
+          <li><strong>Confirme.</strong> No Quest 2, <strong>belisque</strong> (polegar + indicador) ou aperte o <strong>gatilho</strong>. No desktop, <strong>clique</strong>. A visualização da região sobe acima do mapa.</li>
+        </ol>
+        <p class="onboard-sub">Dentro do painel, olhe para um ano e confirme para trocar o ano. As quatro colunas na beira da mesa trocam o indicador.</p>
+        <button id="onboardStart" type="button">Entrar</button>
+        <p class="onboard-foot">Você pode rever isto no botão “?” no canto.</p>
+      </div>
+    </div>
+    <button class="help-btn" id="helpBtn" type="button" aria-label="Rever ajuda">?</button>
+
+    <!-- =====================================================================
+         CENA
+         O HTML descreve a ESTRUTURA e o CONTEUDO; as medidas da planta (sala,
+         mesa, zona de contexto, painel) sao aplicadas por js-ambiente/15-sala.js
+         a partir de PLANTA, que por sua vez e derivada do desenho SVG. Nenhuma
+         medida de ambiente aparece duplicada aqui.
+         ===================================================================== -->
+    <a-scene
+      id="scene"
+      webxr="optionalFeatures: bounded-floor, hand-tracking"
+      renderer="antialias: false; colorManagement: true; foveationLevel: 1; highRefreshRate: true; exposure: 1.05"
+      cursor="rayOrigin: mouse; fuse: false"
+      raycaster="objects: .clickable; far: 14; interval: 60"
+      fog="type: linear; color: #05070f; near: 5.5; far: 15"
+      background="color: #05070f"
+      vr-mode-ui="enabled: true"
+      device-orientation-permission-ui="enabled: false"
+    >
+      <a-assets></a-assets>
+
+      <!-- Rig no CHAO (y = 0). Em VR a altura vem do headset (local-floor); a
+           camera volta a 0 no enter-vr. Somar 1,6 aqui poria o visitante a
+           3,2 m do chao dentro do Quest. -->
+      <a-entity id="cameraRig" position="0 0 1.8">
+        <a-entity
+          id="camera"
+          camera
+          position="0 1.6 0"
+          look-controls="pointerLockEnabled: false; mouseEnabled: true"
+          wasd-controls="acceleration: 14; fly: false"
+        >
+          <!-- Reticulo de olhar: so ligado dentro do headset. -->
+          <a-cursor
+            id="gazeCursor"
+            visible="false"
+            position="0 0 -1"
+            geometry="primitive: ring; radiusInner: 0.011; radiusOuter: 0.019"
+            material="color: #ffffff; shader: flat; opacity: 0.9"
+            raycaster="enabled: false; objects: .clickable; far: 14; interval: 60"
+            cursor="fuse: false"
+          ></a-cursor>
+
+          <!-- Escurecimento de conforto no teleporte (o overlay 2D nao aparece
+               dentro do headset). -->
+          <a-plane
+            id="vrFade"
+            position="0 0 -0.5"
+            width="2.2"
+            height="1.5"
+            visible="false"
+            material="shader: flat; color: #02040a; opacity: 0; transparent: true; depthTest: false"
+          ></a-plane>
+
+          <!-- Legenda 3D: o unico texto que existe dentro do headset. -->
+          <a-entity id="captionPanel" position="0 -0.52 -1" visible="false">
+            <a-plane width="1.16" height="0.2" material="color: #000000; opacity: 0.72; transparent: true; shader: flat"></a-plane>
+            <a-text
+              id="captionText"
+              value=""
+              position="0 0 0.01"
+              width="1.08"
+              align="center"
+              color="#ffffff"
+              font="assets/poppins-msdf.json"
+              shader="msdf"
+              negate="false"
+              wrap-count="62"
+            ></a-text>
+          </a-entity>
+        </a-entity>
+
+        <!-- Quest 2: maos E controles declarados. O A-Frame so liga aquele cujo
+             input source existir, entao o visitante pode largar os controles no
+             meio da sessao e continuar com as maos (e vice-versa). -->
+        <a-entity id="handLeft" hand-tracking-controls="hand: left; modelStyle: mesh; modelColor: #7fd4ff"></a-entity>
+        <a-entity id="handRight" hand-tracking-controls="hand: right; modelStyle: mesh; modelColor: #7fd4ff"></a-entity>
+        <a-entity id="ctrlLeft" oculus-touch-controls="hand: left"></a-entity>
+        <a-entity id="ctrlRight" oculus-touch-controls="hand: right"></a-entity>
+      </a-entity>
+
+      <!-- Sala e pegadas das camadas no piso (construidas a partir de PLANTA). -->
+      <a-entity id="sala"></a-entity>
+      <a-entity id="zonas"></a-entity>
+
+      <!-- Discos do piso: "voce esta aqui" e destinos de teleporte. -->
+      <a-entity id="discoUsuario">
+        <a-ring
+          class="clickable alvo-teleporte"
+          radius-inner="0.2"
+          radius-outer="0.28"
+          rotation="-90 0 0"
+          data-destino="usuario"
+          material="color: #1d9e75; shader: flat; opacity: 0.85; transparent: true"
+        ></a-ring>
+        <a-circle radius="0.09" rotation="-90 0 0" material="color: #1d9e75; shader: flat"></a-circle>
+      </a-entity>
+      <a-entity id="discoEntrada">
+        <a-ring
+          class="clickable alvo-teleporte"
+          radius-inner="0.18"
+          radius-outer="0.24"
+          rotation="-90 0 0"
+          data-destino="entrada"
+          material="color: #4cc9f0; shader: flat; opacity: 0.5; transparent: true"
+        ></a-ring>
+      </a-entity>
+      <a-entity id="discoContexto">
+        <a-ring
+          class="clickable alvo-teleporte"
+          radius-inner="0.18"
+          radius-outer="0.24"
+          rotation="-90 0 0"
+          data-destino="contexto"
+          material="color: #8fa6c8; shader: flat; opacity: 0.45; transparent: true"
+        ></a-ring>
+      </a-entity>
+
+      <!-- =================================================================
+           CAMADA DE DADOS BRUTOS: a mesa do mapa.
+           ================================================================= -->
+      <a-entity id="mesaMapa">
+        <a-box id="plinto" material="color: #0e1a2b; roughness: 0.9; metalness: 0.06"></a-box>
+        <a-box id="tampo" material="color: #132133; roughness: 0.7; metalness: 0.1"></a-box>
+        <a-plane
+          id="tampoFace"
+          rotation="-90 0 0"
+          material="color: #123f33; roughness: 0.85; metalness: 0.04"
+        ></a-plane>
+
+        <a-entity id="regioes"></a-entity>
+        <a-entity id="colunas"></a-entity>
+
+        <a-text
+          id="mesaValorTitulo" data-linha-unica="1"
+          value=""
+          width="1.25"
+          wrap-count="48"
+          align="center"
+          color="#6fa8e6"
+          font="assets/poppins-msdf.json" shader="msdf" negate="false"
+        ></a-text>
+
+        <!-- Unico controle do ambiente (a sessao de estudo precisa mutar o som). -->
+        <a-entity id="somBtn">
+          <a-plane
+            class="clickable alvo-acao"
+            rotation="-90 0 0"
+            width="0.36"
+            height="0.11"
+            data-acao="som"
+            material="color: #16263f; shader: flat; opacity: 0.9; transparent: true"
+          ></a-plane>
+          <a-text
+            id="somLabel" data-linha-unica="1"
+            value="Som ligado"
+            rotation="-90 0 0"
+            position="0 0.004 0"
+            width="0.26"
+            wrap-count="11"
+            align="center"
+            color="#cfe9ff"
+            font="assets/poppins-msdf.json" shader="msdf" negate="false"
+          ></a-text>
+        </a-entity>
+      </a-entity>
+
+      <!-- =================================================================
+           CAMADA TEXTUAL: zona de contexto (anotacoes narrativas).
+           ================================================================= -->
+      <a-entity id="contextoZona">
+        <a-entity id="contextoSlabs"></a-entity>
+      </a-entity>
+
+      <!-- Fio que liga a regiao em foco ao painel (o tracejado do desenho). -->
+      <a-cylinder
+        id="fio"
+        radius="0.006"
+        height="0.3"
+        visible="false"
+        material="color: #8b7fe8; shader: flat; opacity: 0.55; transparent: true"
+      ></a-cylinder>
+
+      <!-- =================================================================
+           PAINEL EMERGENTE (3D): a visualizacao da regiao.
+           ================================================================= -->
+      <a-entity id="painel" visible="false">
+        <a-plane id="painelFundo" material="color: #0a1020; opacity: 0.96; transparent: true; shader: flat"></a-plane>
+        <a-plane id="painelTopo" height="0.04" material="color: #4cc9f0; shader: flat"></a-plane>
+
+        <!-- width/wrap-count andam juntos: o A-Frame dimensiona o glifo por
+             width/wrapCount, entao um rotulo curto com o wrapCount padrao (40)
+             sai ilegivel no headset. Cada texto abaixo declara quantos
+             caracteres cabem na largura que pediu. -->
+        <a-text id="painelKicker" data-linha-unica="1" value="" position="-1.38 0.6 0.006" width="0.6" wrap-count="22" align="left" anchor="left" color="#8b7fe8" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <a-text id="painelTitulo" data-linha-unica="1" value="" position="-1.38 0.46 0.006" width="1.05" wrap-count="19" align="left" anchor="left" color="#f4f8ff" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <a-text id="painelManchete" value="" position="-1.38 0.33 0.006" width="2.3" wrap-count="62" align="left" anchor="left" color="#c6d4ea" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <a-plane id="painelAcento" width="2.76" height="0.005" position="0 0.25 0.006" material="color: #4cc9f0; shader: flat; opacity: 0.5; transparent: true"></a-plane>
+
+        <!-- Fechar: um alvo pequeno e afastado, para nao competir com os anos. -->
+        <a-entity id="painelFechar" class="clickable alvo-acao" data-acao="fechar" position="1.37 0.6 0.01">
+          <a-circle radius="0.045" material="color: #1a2436; shader: flat; opacity: 0.95; transparent: true"></a-circle>
+          <a-text value="x" position="0 0 0.004" width="0.05" wrap-count="1" align="center" color="#cfe0f4" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        </a-entity>
+
+        <!-- Grafico anotado 2017-2024 (heroi narrativo). -->
+        <a-entity id="chartGrid"></a-entity>
+        <a-entity id="chartLinha"></a-entity>
+        <a-entity id="chartMarcadores"></a-entity>
+        <a-entity id="chartAnotacoes"></a-entity>
+        <a-text id="chartReadout" data-linha-unica="1" value="" position="-0.46 -0.63 0.01" width="0.63" wrap-count="14" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+
+        <!-- Parede de 100 blocos do ano em foco (para onde vao os alunos). -->
+        <a-text value="PARA ONDE VÃO OS ALUNOS" position="1.0 0.2 0.01" width="0.62" wrap-count="23" align="center" color="#7e92b4" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <a-entity id="paredeHost" position="1.0 -0.32 0.02"></a-entity>
+        <a-text id="paredeAno" data-linha-unica="1" value="" position="1.0 -0.4 0.01" width="0.62" wrap-count="24" align="center" color="#cfe0f4" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <a-text id="paredeLegConc" data-linha-unica="1" value="" position="1.0 -0.48 0.01" width="0.74" wrap-count="30" align="center" color="#3ad29f" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <a-text id="paredeLegRet" data-linha-unica="1" value="" position="1.0 -0.55 0.01" width="0.74" wrap-count="30" align="center" color="#ffd166" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <a-text id="paredeLegEvad" data-linha-unica="1" value="" position="1.0 -0.62 0.01" width="0.74" wrap-count="30" align="center" color="#ff6b6b" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+      </a-entity>
+    </a-scene>
+
+    <!-- Ordem importa: planta -> base -> dados/audio -> construtores -> boot. -->
+    <script src="js-ambiente/00-planta.js?v=20"></script>
+    <script src="js-ambiente/01-telemetria.js?v=20"></script>
+    <script src="js-ambiente/02-base.js?v=20"></script>
+    <script src="js-ambiente/03-audio.js?v=20"></script>
+    <script src="js-ambiente/04-narrativa.js?v=20"></script>
+    <script src="js-ambiente/10-voxel.js?v=20"></script>
+    <script src="js-ambiente/15-sala.js?v=20"></script>
+    <script src="js-ambiente/20-mapa.js?v=20"></script>
+    <script src="js-ambiente/30-contexto.js?v=20"></script>
+    <script src="js-ambiente/40-painel.js?v=20"></script>
+    <script src="js-ambiente/50-interacao.js?v=20"></script>
+    <script src="js-ambiente/60-boot.js?v=20"></script>
+    <script src="js-ambiente/90-estudo.js?v=20"></script>
+  </body>
+</html>
