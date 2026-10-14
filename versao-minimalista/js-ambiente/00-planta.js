@@ -97,6 +97,70 @@ const PLANTA = {
 
 PLANTA.painel.cy = PLANTA.painel.baseY + PLANTA.painel.h / 2;
 
+// ---------------------------------------------------------------------------
+// LINHA DO TEMPO NO PISO (strollytelling, piloto-v1).
+//
+// O corpo faz a historia andar: 8 trechos de 20 cm, um por ano (2017 a 2024),
+// numa faixa de 1,60 m no vao livre entre a borda proxima da mesa e a parede
+// da entrada, PARALELA a mesa e centrada sob o painel. Andar de lado (de
+// frente para a mesa e o painel) percorre o tempo: esquerda = passado,
+// direita = futuro - ninguem anda de costas de headset. A faixa inteira cabe
+// numa area real de 2 x 2 m, sem teleporte sobre ela.
+//
+// O ano segue a CABECA (o Quest nao ve os pes). Para o ano nao piscar quando a
+// pessoa balanca o corpo na fronteira, ha uma folga (histerese) de 5 cm: so
+// troca quando a cabeca ja entrou 5 cm no trecho vizinho. Fora do corredor da
+// faixa (longe dela, ou na zona de contexto) o ano fica onde estava.
+// ---------------------------------------------------------------------------
+const FAIXA_ANOS = 8;
+const FAIXA_TRECHO_M = 0.2;
+PLANTA.faixa = {
+  anos: FAIXA_ANOS,
+  trecho: FAIXA_TRECHO_M,
+  comprimento: _r2(FAIXA_ANOS * FAIXA_TRECHO_M),
+  cx: PLANTA.painel.cx,
+  // 0,49 m depois da borda proxima da mesa: livra o rotulo "CAMADA DE DADOS
+  // BRUTOS" do piso e fica a ~0,4 m da parede da entrada.
+  z: _r2(PLANTA.mapa.cz + PLANTA.mapa.d / 2 + 0.49),
+  largura: 0.32, // profundidade visual da faixa no piso
+  histerese: 0.05,
+  // corredor em que a faixa manda no ano (fora dele, o ano fica parado)
+  corredorZ: 0.45,
+  corredorX: 0.4,
+};
+PLANTA.faixa.x0 = _r2(PLANTA.faixa.cx - PLANTA.faixa.comprimento / 2);
+PLANTA.faixa.x1 = _r2(PLANTA.faixa.cx + PLANTA.faixa.comprimento / 2);
+
+// O ponto de observacao do desenho virou a linha do tempo: o CENTRO da faixa
+// e de onde o painel, as colunas e a zona de contexto se orientam. (O ponto
+// original do desenho continua em PLANTA_SVG.usuario.)
+PLANTA.usuario = { x: PLANTA.faixa.cx, z: PLANTA.faixa.z };
+// Disco de volta para a linha do tempo. Ele so RESTAURA a ancora (70-faixa.js):
+// a pessoa reaparece sobre o ano em que o corpo dela esta, nao no disco - entao
+// o lugar dele so precisa ser facil de mirar de onde se sai da faixa (a zona
+// de contexto, a 1,5 m) e ficar fora do caminho: meio metro alem de 2024.
+PLANTA.discoFaixa = { x: _r2(PLANTA.faixa.x1 + 0.5), z: PLANTA.faixa.z };
+
+// Ano (indice 0..anos-1) para a cabeca em (x, z), dado o ano atual.
+// - fora do corredor da faixa: devolve `atual` (o ano trava);
+// - alem das pontas: 0 ou anos-1;
+// - perto de uma fronteira: so troca depois de entrar `histerese` no vizinho.
+// Funcao pura: e o que a condicao imersiva usa a cada quadro, e o que os testes
+// conferem nas fronteiras.
+function anoNaFaixa(x, z, atual, F) {
+  F = F || PLANTA.faixa;
+  if (Math.abs(z - F.z) > F.corredorZ) return atual;
+  if (x < F.x0 - F.corredorX || x > F.x1 + F.corredorX) return atual;
+  const ultimo = F.anos - 1;
+  const bruto = Math.max(0, Math.min(ultimo, Math.floor((x - F.x0) / F.trecho)));
+  if (atual == null || atual === bruto) return bruto;
+  // Trecho atual "alargado" pela folga dos dois lados: dentro dele, nada muda.
+  const ini = F.x0 + atual * F.trecho - (atual === 0 ? Infinity : F.histerese);
+  const fim = F.x0 + (atual + 1) * F.trecho + (atual === ultimo ? Infinity : F.histerese);
+  if (x >= ini && x < fim) return atual;
+  return bruto;
+}
+
 // Guinada (graus) para que uma entidade em `p` encare o ponto `alvo`.
 // Em A-Frame, guinada 0 olha para -Z; a frente de uma entidade e +Z.
 function encarar(p, alvo) {
@@ -149,5 +213,5 @@ const COLUNAS = {
 };
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { PLANTA, PLANTA_SVG, REGIOES_MESA, PLACA, COLUNAS, encarar, olharPara, svgX, svgZ, svgD };
+  module.exports = { PLANTA, PLANTA_SVG, REGIOES_MESA, PLACA, COLUNAS, encarar, olharPara, svgX, svgZ, svgD, anoNaFaixa };
 }

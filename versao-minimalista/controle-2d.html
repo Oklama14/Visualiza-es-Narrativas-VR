@@ -5,139 +5,194 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Camadas retóricas visíveis — condição 2D (controle do estudo)</title>
 <!--
-  CONDICAO 2D (controle do estudo). Os MESMOS dados, textos e ordem da condicao
-  imersiva (index.html), numa pagina plana: as tres camadas da sala viram tres
-  areas da pagina.
+  CONDICAO 2D (controle do estudo) - piloto-v1, scrollytelling.
+
+  Os MESMOS dados, textos e ordem da condicao imersiva (index.html), numa
+  pagina plana. As tres camadas da sala ficam num PALCO fixo (sticky) e a
+  ROLAGEM faz o papel do corpo na linha do tempo do piso: cada passo da trilha
+  a esquerda e um ano, de 2017 a 2024.
+    painel .... a visualizacao (Brasil por padrao; a regiao, se aberta):
+                grafico revelado ate o ano em que a pessoa esta e os 100
+                blocos do ano. O desfecho (pior/melhor ano) so em 2024.
     mesa ...... dados brutos: 5 regioes com 100 blocos (1 bloco = 1%) e os 4
-                indicadores do contexto em foco
-    painel .... a visualizacao da regiao escolhida: grafico anotado 2017-2024
-                e os 100 blocos do ano (para onde vao os alunos)
+                indicadores do contexto em foco - no ano em que a pessoa esta
     contexto .. as tres anotacoes narrativas (manchete, leitura, contexto)
-  Toda frase vem de js-ambiente/04-narrativa.js e as tarefas de
-  js-ambiente/07-tarefas.js - os mesmos arquivos da condicao imersiva. A
-  semantica tambem e a mesma: passar o mouse numa regiao poe ela em foco (como
-  o olhar); clicar abre o painel (como a pinca). tests/paridade-2d.js confere,
-  com as duas paginas abertas, que os textos exibidos sao identicos.
+    regua ..... a linha do tempo (o equivalente da faixa no piso)
+  A regra que transforma a rolagem em ano e a MESMA da faixa (anoNaFaixa, em
+  js-ambiente/00-planta.js), com a mesma folga nas fronteiras. Toda frase vem
+  de js-ambiente/04-narrativa.js e as tarefas de js-ambiente/07-tarefas.js -
+  os mesmos arquivos da condicao imersiva. Passar o mouse numa regiao poe ela
+  em foco (como o olhar); clicar abre o painel dela (como a pinca); o "x"
+  volta ao Brasil. tests/paridade-2d.js confere, com as duas paginas abertas,
+  que os textos exibidos sao identicos.
 -->
 <style>
   :root { --bg:#070b16; --panel:#0b1322; --border:rgba(255,255,255,.14); --txt:#eaf2ff; --muted:#9fb2d6; --foco:#ffa23a; --verde:#1d9e75; }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.5 Inter,ui-sans-serif,system-ui,sans-serif; }
-  .wrap { max-width:1180px; margin:0 auto; padding:24px 18px 64px; }
+  html { scroll-behavior:auto; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.45 Inter,ui-sans-serif,system-ui,sans-serif; }
+  .topo { max-width:1320px; margin:0 auto; padding:22px 18px 6px; }
   .kicker { color:#87dcff; font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; }
-  h1 { margin:.15em 0 .1em; font-size:1.45rem; }
-  .sub { color:var(--muted); margin:0 0 16px; }
-  .layout { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr); gap:16px; align-items:start; }
-  @media (max-width: 920px) { .layout { grid-template-columns:1fr; } }
-  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:0 0 16px; }
-  .camada { color:#7e92b4; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; margin:0 0 8px; }
-  .mesa-titulo { color:#6fa8e6; font-weight:600; letter-spacing:.04em; margin:0 0 10px; white-space:pre; }
-  .mapa { display:grid; grid-template-columns:1fr 1fr; grid-template-areas:"norte nordeste" "centro-oeste sudeste" "sul ."; gap:10px; }
-  .regiao { display:flex; gap:12px; align-items:center; border:1px solid rgba(29,158,117,.45); background:#0f2a24; border-radius:8px; padding:10px; cursor:pointer; outline:none; }
-  .regiao .grade { width:104px; flex:none; margin:0; }
+  h1 { margin:.15em 0 .1em; font-size:1.4rem; }
+  .sub { color:var(--muted); margin:0; }
+  .instrucao { color:#cfe0f4; margin:8px 0 0; }
+
+  /* Historia: trilha de anos (rola) + palco (fixo) */
+  .historia { max-width:1320px; margin:0 auto; padding:0 18px; display:grid; grid-template-columns:150px minmax(0,1fr); gap:16px; }
+  .trilha { padding:42vh 0 52vh; }
+  .passo { height:55vh; display:flex; align-items:center; }
+  .passo .cartao { width:100%; border:1px solid var(--border); border-left:4px solid #1b2a44; border-radius:8px; padding:10px 12px; background:#0b1322; color:var(--muted); transition:border-color .15s, color .15s, background .15s; }
+  .passo .ano { font-size:1.6rem; font-weight:800; letter-spacing:.02em; }
+  .passo .evento { font-size:.8rem; color:#ffd166; margin-top:2px; }
+  .passo.atual .cartao { color:#fff; background:#122039; }
+  .passo.passado .cartao { color:#cfe0f4; border-left-color:#2c4a6e; }
+  .palco { position:sticky; top:0; height:100vh; padding:10px 0; display:flex; flex-direction:column; gap:10px; min-height:0; }
+
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 14px; }
+  .camada { color:#7e92b4; font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; margin:0 0 6px; }
+
+  /* Painel */
+  .painel { flex:none; position:relative; }
+  .painel-topo { height:4px; border-radius:2px; margin:-10px -14px 8px; }
+  .painel-cab { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .painel-kicker { color:#8b7fe8; font-size:.72rem; letter-spacing:.06em; }
+  .painel-titulo { font-size:1.15rem; font-weight:700; margin:1px 0; }
+  .painel-manchete { color:#c6d4ea; margin:0 0 4px; }
+  .painel-ano { text-align:right; flex:none; }
+  .painel-ano .grande { font-size:2.1rem; font-weight:800; line-height:1; }
+  .painel-ano .evento { color:#ffd166; font-size:.82rem; min-height:1.1em; }
+  .fechar { background:#1a2436; color:#cfe0f4; border:1px solid var(--border); border-radius:50%; width:30px; height:30px; cursor:pointer; font:inherit; margin-left:8px; }
+  .fechar[hidden] { display:none; }
+  .painel-corpo { display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:14px; align-items:start; }
+  canvas { width:100%; display:block; }
+  .readout { font-weight:700; margin-top:2px; white-space:pre; }
+  .parede-titulo { color:#7e92b4; font-size:.72rem; letter-spacing:.05em; text-align:center; }
+  .parede .grade { max-width:150px; margin:4px auto; }
+  .parede p { margin:1px 0; text-align:center; font-size:.8rem; white-space:pre; }
+
+  /* Mesa e contexto, lado a lado */
+  .baixo { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:10px; }
+  .baixo > .card { overflow:auto; }
+  .mesa-titulo { color:#6fa8e6; font-weight:600; letter-spacing:.04em; margin:0 0 6px; white-space:pre; font-size:.85rem; }
+  .mesa-corpo { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:10px; }
+  .mapa { display:grid; grid-template-columns:1fr 1fr; grid-template-areas:"norte nordeste" "centro-oeste sudeste" "sul ."; gap:6px; }
+  .regiao { display:flex; gap:8px; align-items:center; border:1px solid rgba(29,158,117,.45); background:#0f2a24; border-radius:7px; padding:6px; cursor:pointer; outline:none; }
+  .regiao .grade { width:56px; flex:none; margin:0; gap:1px; }
   .regiao.foco { border-color:#7fd4ff; background:#123a33; }
   .regiao.aberta { border-color:var(--foco); background:#3b2a12; }
-  .regiao .nome { font-size:.8rem; letter-spacing:.06em; color:var(--muted); }
+  .regiao .nome { font-size:.68rem; letter-spacing:.05em; color:var(--muted); }
   .regiao.aberta .nome { color:#ffd9a8; }
-  .regiao .valor { font-weight:700; font-size:1.15rem; margin-top:4px; }
-  .grade { display:grid; grid-template-columns:repeat(10, 1fr); gap:2px; margin-top:6px; max-width:150px; }
+  .regiao .valor { font-weight:700; font-size:.95rem; }
+  .grade { display:grid; grid-template-columns:repeat(10, 1fr); gap:2px; max-width:150px; }
   .grade i { display:block; aspect-ratio:1; border-radius:1px; background:#1c3346; }
-  .colunas { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-top:12px; }
-  .coluna { border:1px solid var(--border); border-radius:8px; padding:8px; background:#0e1a2b; cursor:pointer; text-align:center; outline:none; }
+  .colunas { display:grid; grid-template-columns:1fr 1fr; gap:6px; align-content:start; }
+  .coluna { border:1px solid var(--border); border-radius:7px; padding:5px; background:#0e1a2b; cursor:pointer; text-align:center; outline:none; }
   .coluna.ativa { border-color:var(--foco); box-shadow:0 0 0 1px var(--foco) inset; }
-  .coluna .grade { max-width:84px; margin:4px auto 0; }
-  .coluna .nome { font-size:.78rem; font-weight:600; }
-  .coluna .valor { font-size:.9rem; }
-  .painel-topo { height:4px; border-radius:2px; margin:-14px -16px 12px; }
-  .painel-cab { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-  .painel-kicker { color:#8b7fe8; font-size:.75rem; letter-spacing:.06em; }
-  .painel-titulo { font-size:1.2rem; font-weight:700; margin:2px 0; }
-  .painel-manchete { color:#c6d4ea; margin:0 0 8px; }
-  .fechar { background:#1a2436; color:#cfe0f4; border:1px solid var(--border); border-radius:50%; width:32px; height:32px; cursor:pointer; font:inherit; }
-  .painel-corpo { display:grid; grid-template-columns:minmax(0,1fr) 200px; gap:14px; align-items:start; }
-  @media (max-width: 640px) { .painel-corpo { grid-template-columns:1fr; } }
-  canvas { width:100%; display:block; }
-  .anos { display:grid; grid-template-columns:repeat(8, 1fr); gap:4px; margin-top:6px; }
-  .anos button { background:#101a30; color:var(--muted); border:1px solid var(--border); border-radius:6px; padding:4px 0; cursor:pointer; font:inherit; font-size:.85rem; }
-  .anos button.ativo { color:#fff; border-color:#7fd4ff; }
-  .readout { font-weight:700; margin-top:8px; white-space:pre; }
-  .parede-titulo { color:#7e92b4; font-size:.78rem; letter-spacing:.05em; text-align:center; }
-  .parede .grade { max-width:180px; margin:6px auto; }
-  .parede p { margin:2px 0; text-align:center; font-size:.85rem; white-space:pre; }
-  .ctx-bloco { border-left:4px solid var(--verde); background:#1b1f27; border-radius:6px; padding:10px 12px; margin-bottom:10px; }
-  .ctx-bloco .k { color:#7fd4ff; font-size:.72rem; letter-spacing:.06em; }
-  .ctx-bloco .t { font-weight:700; margin:2px 0 4px; }
-  .ctx-bloco .c { color:#c6d4ea; margin:0; }
-  .lateral { position:sticky; top:12px; }
-  .nota { color:var(--muted); font-size:.82rem; }
-  #legenda { position:sticky; top:0; z-index:20; display:none; background:#000c; border:1px solid #7b61ff; color:#fff; font-weight:600; padding:10px 14px; border-radius:8px; margin:0 0 12px; }
+  .coluna .grade { max-width:48px; margin:3px auto 0; gap:1px; }
+  .coluna .nome { font-size:.72rem; font-weight:600; }
+  .coluna .valor { font-size:.82rem; }
+  .ctx-bloco { border-left:4px solid var(--verde); background:#1b1f27; border-radius:6px; padding:7px 10px; margin-bottom:7px; }
+  .ctx-bloco .k { color:#7fd4ff; font-size:.68rem; letter-spacing:.06em; }
+  .ctx-bloco .t { font-weight:700; margin:1px 0 2px; font-size:.92rem; }
+  .ctx-bloco .c { color:#c6d4ea; margin:0; font-size:.88rem; }
+
+  /* Regua: a linha do tempo (o equivalente da faixa no piso) */
+  .regua { flex:none; display:grid; grid-template-columns:repeat(8, 1fr); gap:3px; }
+  .regua span { text-align:center; font-size:.78rem; font-weight:600; padding:4px 0; border-radius:4px; background:#1b2a44; color:#8fa6c8; }
+  .regua span.passado { background:#2c4a6e; color:#cfe0f4; }
+  .regua span.atual { color:#081022; }
+
+  .nota { color:var(--muted); font-size:.78rem; }
+  .rodape { max-width:1320px; margin:0 auto; padding:0 18px 40px; }
+  #legenda { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:20; display:none; max-width:min(760px, 92vw); background:#000d; border:1px solid #7b61ff; color:#fff; font-weight:600; padding:10px 14px; border-radius:8px; }
   #legenda.visivel { display:block; }
   #studyPanel2d { position:fixed; right:14px; top:14px; z-index:30; width:250px; padding:12px 14px; background:rgba(8,13,24,.95); border:1px solid var(--border); border-left:3px solid #7b61ff; border-radius:10px; font-size:13px; }
   #studyPanel2d button { display:block; width:100%; margin-top:6px; padding:7px 10px; border-radius:7px; cursor:pointer; background:rgba(255,255,255,.08); color:#dfe9f6; border:1px solid rgba(255,255,255,.18); font:inherit; }
   #studyPanel2d button.destaque { background:#7b61ff; color:#fff; border:none; font-weight:700; }
+  @media (max-width: 900px) {
+    .historia { grid-template-columns:84px minmax(0,1fr); gap:8px; }
+    .passo .ano { font-size:1.1rem; }
+    .baixo, .mesa-corpo { grid-template-columns:1fr; }
+    .painel-corpo { grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
+<header class="topo">
   <span class="kicker">Plataforma Nilo Peçanha · Rede Federal</span>
   <h1 id="hudTitle">Camadas retóricas visíveis</h1>
   <p class="sub" id="hudSubtitle">Eficiência acadêmica da Rede Federal · 2017–2024</p>
+  <p class="instrucao" id="instrucao">Role a página: cada passo é um ano. Passe o mouse sobre uma região para pô-la em foco; clique para abrir a visualização dela.</p>
+</header>
 
-  <div id="legenda" role="status" aria-live="polite"></div>
+<div id="legenda" role="status" aria-live="polite"></div>
 
-  <div class="layout">
-    <div>
+<main class="historia">
+  <div class="trilha" id="trilha" data-secao="trilha" aria-label="Linha do tempo: role para avançar"></div>
+
+  <div class="palco" id="palco">
+    <section class="card painel" data-secao="painel" id="painel" aria-label="Visualização">
+      <div class="painel-topo" id="painelTopo"></div>
+      <div class="painel-cab">
+        <div>
+          <div class="painel-kicker" id="painelKicker"></div>
+          <div class="painel-titulo" id="painelTitulo"></div>
+          <p class="painel-manchete" id="painelManchete"></p>
+        </div>
+        <div style="display:flex;align-items:flex-start">
+          <div class="painel-ano">
+            <div class="grande" id="painelAno"></div>
+            <div class="evento" id="painelEvento"></div>
+          </div>
+          <button class="fechar" id="painelFechar" type="button" aria-label="Voltar ao Brasil" hidden>x</button>
+        </div>
+      </div>
+      <div class="painel-corpo">
+        <div>
+          <canvas id="grafico"></canvas>
+          <div class="readout" id="chartReadout"></div>
+        </div>
+        <div class="parede">
+          <div class="parede-titulo">PARA ONDE VÃO OS ALUNOS</div>
+          <div class="grade" id="parede"></div>
+          <p id="paredeAno"></p>
+          <p id="paredeLegConc" style="color:#3ad29f"></p>
+          <p id="paredeLegRet" style="color:#ffd166"></p>
+          <p id="paredeLegEvad" style="color:#ff6b6b"></p>
+        </div>
+      </div>
+    </section>
+
+    <div class="baixo">
       <section class="card" data-secao="mesa" aria-label="Camada de dados brutos">
         <p class="camada">Camada de dados brutos · o mapa</p>
         <p class="mesa-titulo" id="mesaValorTitulo"></p>
-        <div class="mapa" id="regioes"></div>
-        <div class="colunas" id="colunas"></div>
-        <p class="nota">Passe o mouse sobre uma região para pô-la em foco; clique para abrir a visualização dela. Os quatro quadros de baixo trocam o indicador.</p>
-      </section>
-
-      <section class="card" data-secao="painel" id="painel" hidden aria-label="Visualização da região">
-        <div class="painel-topo" id="painelTopo"></div>
-        <div class="painel-cab">
-          <div>
-            <div class="painel-kicker" id="painelKicker"></div>
-            <div class="painel-titulo" id="painelTitulo"></div>
-          </div>
-          <button class="fechar" id="painelFechar" type="button" aria-label="Fechar">x</button>
-        </div>
-        <p class="painel-manchete" id="painelManchete"></p>
-        <div class="painel-corpo">
-          <div>
-            <canvas id="grafico"></canvas>
-            <div class="anos" id="anos"></div>
-            <div class="readout" id="chartReadout"></div>
-          </div>
-          <div class="parede">
-            <div class="parede-titulo">PARA ONDE VÃO OS ALUNOS</div>
-            <div class="grade" id="parede"></div>
-            <p id="paredeAno"></p>
-            <p id="paredeLegConc" style="color:#3ad29f"></p>
-            <p id="paredeLegRet" style="color:#ffd166"></p>
-            <p id="paredeLegEvad" style="color:#ff6b6b"></p>
-          </div>
+        <div class="mesa-corpo">
+          <div class="mapa" id="regioes"></div>
+          <div class="colunas" id="colunas"></div>
         </div>
       </section>
-    </div>
-
-    <aside class="lateral" data-secao="contexto" aria-label="Camada textual">
-      <section class="card">
+      <aside class="card" data-secao="contexto" aria-label="Camada textual">
         <p class="camada">Camada textual · anotações narrativas</p>
         <div id="contextoSlabs"></div>
-      </section>
-      <p class="nota">Fonte: Plataforma Nilo Peçanha / SETEC-MEC. Percentuais recalculados a partir de contagens brutas. Dados do IFRS podem conter inconsistências.</p>
-    </aside>
-  </div>
-</div>
+      </aside>
+    </div>
 
-<!-- Os mesmos modulos da condicao imersiva (sem nada de A-Frame). -->
-<script src="js-ambiente/01-telemetria.js?v=22" data-condicao="2d"></script>
-<script src="js-ambiente/02-base.js?v=22"></script>
-<script src="js-ambiente/04-narrativa.js?v=22"></script>
-<script src="js-ambiente/07-tarefas.js?v=22"></script>
+    <div class="regua" id="regua" data-secao="regua" aria-hidden="true"></div>
+  </div>
+</main>
+
+<footer class="rodape">
+  <p class="nota">Fonte: Plataforma Nilo Peçanha / SETEC-MEC. Percentuais recalculados a partir de contagens brutas. Dados do IFRS podem conter inconsistências.</p>
+</footer>
+
+<!-- Os mesmos modulos da condicao imersiva (sem nada de A-Frame). 00-planta
+     traz a regra do ano da linha do tempo (anoNaFaixa). -->
+<script src="js-ambiente/00-planta.js?v=23"></script>
+<script src="js-ambiente/01-telemetria.js?v=23" data-condicao="2d"></script>
+<script src="js-ambiente/02-base.js?v=23"></script>
+<script src="js-ambiente/04-narrativa.js?v=23"></script>
+<script src="js-ambiente/07-tarefas.js?v=23"></script>
 <script>
 (function () {
   "use strict";
@@ -194,10 +249,11 @@
     });
   }
 
+  // A mesa acompanha o ANO da linha do tempo (como na imersiva).
   function updateMapa() {
     const ind = indicadorByKey(state.indicadorKey);
     DADOS.regioes.forEach((r) => {
-      const v = latestValue(r.series[state.indicadorKey]);
+      const v = valorNoAno(r.series[state.indicadorKey], state.anoIdx);
       const b = regioesEls[r.id];
       b.querySelector(".grade").innerHTML = grade(v == null ? 0 : blocosPara(v), 100, ind.cor);
       b.querySelector(".valor").textContent = textoValorRegiao(v);
@@ -205,12 +261,12 @@
     const ctxAtivo = contextoById(state.regiaoId || state.focoId) || DADOS.brasil;
     DADOS.indicadores.forEach((i) => {
       const c = colunaEls[i.key];
-      const v = latestValue(ctxAtivo.series[i.key]);
+      const v = valorNoAno(ctxAtivo.series[i.key], state.anoIdx);
       c.querySelector(".valor").textContent = v == null ? "-" : `${fmt(v)}%`;
       c.querySelector(".grade").innerHTML = grade(v == null ? 0 : blocosPara(v), 100, i.cor);
       c.classList.toggle("ativa", i.key === state.indicadorKey);
     });
-    $("mesaValorTitulo").textContent = tituloMesa(state.indicadorKey);
+    $("mesaValorTitulo").textContent = tituloMesa(state.indicadorKey, state.anoIdx);
   }
 
   function pintarFoco() {
@@ -237,7 +293,6 @@
     const d = e.dataset;
     if (d.regiao) return `regiao:${d.regiao}`;
     if (d.indicador) return `indicador:${d.indicador}`;
-    if (d.ano != null) return `ano:${d.ano}`;
     if (d.acao) return `acao:${d.acao}`;
     return null;
   }
@@ -269,33 +324,32 @@
     const d = e.dataset;
     if (d.regiao) abrirPainel(d.regiao);
     else if (d.indicador) trocarIndicador(d.indicador);
-    else if (d.ano != null) { if (state.painelAberto) selecionarAno(Number(d.ano)); }
     else if (d.acao === "fechar") fecharPainel();
   }
 
+  // Trocar de indicador NAO mexe no ano: a pessoa continua onde esta no tempo.
   function trocarIndicador(key) {
     if (state.indicadorKey === key) return;
     state.indicadorKey = key;
-    state.anoIdx = null;
     tlog("indicador", { key });
     updateMapa();
-    if (state.painelAberto) renderPainel();
+    renderPainel();
     updateContexto();
+    pintarRegua();
   }
 
   // ---- painel ---------------------------------------------------------------
+  // Sempre a vista: sem regiao aberta, mostra o Brasil. Abrir uma regiao troca
+  // o conteudo; o "x" volta ao Brasil.
   function abrirPainel(id) {
     state.regiaoId = id;
-    state.anoIdx = null;
+    state.painelAberto = true;
     setFoco(id);
     renderPainel();
     updateContexto();
     updateMapa();
     pintarFoco();
-    const jaAberto = state.painelAberto;
-    state.painelAberto = true;
-    $("painel").hidden = false;
-    if (!jaAberto) $("painel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    $("painelFechar").hidden = false;
     tlog("painel", { evento: "abrir", regiao: id });
   }
 
@@ -303,8 +357,8 @@
     if (!state.painelAberto) return;
     state.painelAberto = false;
     state.regiaoId = null;
-    state.anoIdx = null;
-    $("painel").hidden = true;
+    $("painelFechar").hidden = true;
+    renderPainel();
     pintarFoco();
     updateMapa();
     updateContexto();
@@ -315,48 +369,53 @@
     const ctx = contextoById(state.regiaoId);
     if (!ctx) return;
     const ind = indicadorByKey(state.indicadorKey);
-    const narr = computeNarrative(ctx, state.indicadorKey);
-    $("painelKicker").textContent = TEXTO_PAINEL_KICKER;
+    $("painelKicker").textContent = kickerPainel(ctx);
     $("painelTitulo").textContent = rotuloContexto(ctx);
-    $("painelManchete").textContent = narr.manchete;
     $("painelTopo").style.background = ind.cor;
-    if (state.anoIdx == null) state.anoIdx = lastValidIndex(ctx.series[state.indicadorKey]);
-    renderAnos();
     updateAno();
   }
 
-  function renderAnos() {
-    const box = $("anos");
-    if (!box.children.length) {
-      DADOS.anos.forEach((ano, i) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.textContent = String(ano).slice(2);
-        b.setAttribute("aria-label", String(ano));
-        b.dataset.ano = String(i);
-        registrarAlvo(b);
-        box.appendChild(b);
-      });
-    }
-    Array.from(box.children).forEach((b) => b.classList.toggle("ativo", Number(b.dataset.ano) === state.anoIdx));
-  }
-
-  function selecionarAno(idx) {
-    state.anoIdx = clampIdx(idx, DADOS.anos.length);
-    tlog("ano", { ano: DADOS.anos[state.anoIdx], regiao: state.regiaoId, indicador: state.indicadorKey });
-    renderAnos();
+  // ---- ano da historia -------------------------------------------------------
+  // Quem muda o ano e a ROLAGEM (como o corpo na faixa da imersiva). A mesma
+  // assinatura de definirAno (40-painel.js) e o mesmo evento de telemetria.
+  function definirAno(idx, via, extra) {
+    const novo = clampIdx(idx, DADOS.anos.length);
+    if (novo === state.anoIdx) return false;
+    const de = state.anoIdx;
+    state.anoIdx = novo;
+    tlog("ano", Object.assign({
+      ano: DADOS.anos[novo],
+      de: de == null ? null : DADOS.anos[de],
+      via: via || null,
+      regiao: state.regiaoId,
+      indicador: state.indicadorKey,
+    }, extra || {}));
     updateAno();
+    updateMapa();
     updateContexto();
+    pintarRegua();
+    return true;
+  }
+
+  // Compatibilidade (testes e console): o mesmo que definirAno.
+  function selecionarAno(idx) {
+    return definirAno(idx, "api");
   }
 
   function updateAno() {
     const ctx = contextoById(state.regiaoId);
     if (!ctx) return;
+    if (state.anoIdx == null) state.anoIdx = 0;
+    const idx = state.anoIdx;
     const ind = indicadorByKey(state.indicadorKey);
-    $("chartReadout").textContent = textoLeituraAno(ctx, state.indicadorKey, state.anoIdx);
+    // A manchete do painel so conhece a historia ate aqui.
+    $("painelManchete").textContent = computeNarrative(ctx, state.indicadorKey, idx).manchete;
+    $("painelAno").textContent = textoAnoPainel(idx);
+    $("painelEvento").textContent = textoEventoAno(idx);
+    $("chartReadout").textContent = textoLeituraAno(ctx, state.indicadorKey, idx);
     $("chartReadout").style.color = ind.cor;
     desenharGrafico(ctx, ind);
-    const p = textosParede(ctx, state.anoIdx);
+    const p = textosParede(ctx, idx);
     $("paredeAno").textContent = p.titulo;
     $("paredeLegConc").textContent = p.legendas[0];
     $("paredeLegRet").textContent = p.legendas[1];
@@ -366,23 +425,24 @@
     $("parede").innerHTML = h;
   }
 
-  // Grafico anotado (o mesmo conteudo do painel 3D: grade 0-100, linha do
-  // indicador, referencia nacional tracejada, ano em foco, os dois cartoes e
-  // a faixa do evento).
+  // Grafico anotado, revelado ate o ano em que a pessoa esta (o mesmo do
+  // painel 3D: grade 0-100, o eixo dos 8 anos inteiro, a linha e a referencia
+  // nacional ate o ano, o evento quando a historia passa por ele e os dois
+  // cartoes so no fim).
   function desenharGrafico(ctx, ind) {
     const cv = $("grafico");
-    // Canvas no tamanho real da tela (texto nitido e do mesmo tamanho do resto
-    // da pagina, em qualquer largura).
+    // Canvas no tamanho real da tela; a altura cabe no palco fixo.
     const dpr = window.devicePixelRatio || 1;
-    const W = Math.max(320, cv.clientWidth || 640);
-    const H = Math.round(W * 0.48);
-    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const W = Math.max(300, cv.clientWidth || 640);
+    const H = Math.round(Math.max(150, Math.min(W * 0.42, window.innerHeight * 0.27)));
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
     cv.style.height = H + "px";
     const g = cv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const serie = ctx.series[state.indicadorKey];
     const anos = DADOS.anos;
-    const ML = 36, MR = 12, MT = 26, MB = 24;
+    const idx = state.anoIdx;
+    const ML = 36, MR = 12, MT = 22, MB = 22;
     const X = (i) => ML + (i / (anos.length - 1)) * (W - ML - MR);
     const Y = (v) => H - MB - (v / 100) * (H - MT - MB);
     g.clearRect(0, 0, W, H);
@@ -393,33 +453,35 @@
       g.fillStyle = "#7e92b4"; g.textAlign = "right"; g.fillText(String(p), ML - 8, Y(p) + 4);
     });
     g.textAlign = "center";
-    anos.forEach((ano, i) => { g.fillStyle = "#7e92b4"; g.fillText(String(ano).slice(2), X(i), H - 6); });
+    anos.forEach((ano, i) => { g.fillStyle = i === idx ? "#ffffff" : "#7e92b4"; g.fillText(String(ano).slice(2), X(i), H - 5); });
 
     (DADOS.eventos || []).forEach((ev) => {
       const i = anos.indexOf(ev.ano);
-      if (i < 0 || serie[i] == null) return;
+      if (i < 0 || serie[i] == null || i > idx) return;
       g.fillStyle = "rgba(255,209,102,.18)";
       g.fillRect(X(i) - 4, MT, 8, H - MT - MB);
       g.fillStyle = "#ffd166";
-      g.fillText(rotuloEvento(ev), X(i), MT - 8);
+      g.fillText(rotuloEvento(ev), X(i), MT - 7);
     });
 
     const linha = (s, cor, largura, tracejado) => {
       g.strokeStyle = cor; g.lineWidth = largura; g.setLineDash(tracejado ? [7, 6] : []);
       g.beginPath();
       let aberto = false;
-      s.forEach((v, i) => { if (v == null) { aberto = false; return; } if (!aberto) { g.moveTo(X(i), Y(v)); aberto = true; } else g.lineTo(X(i), Y(v)); });
+      s.forEach((v, i) => { if (v == null || i > idx) { aberto = false; return; } if (!aberto) { g.moveTo(X(i), Y(v)); aberto = true; } else g.lineTo(X(i), Y(v)); });
       g.stroke(); g.setLineDash([]); g.lineWidth = 1;
     };
     if (ctx.tipo !== "brasil") linha(DADOS.brasil.series[state.indicadorKey], "rgba(143,166,200,.5)", 1.5, true);
     linha(serie, ind.cor, 3, false);
     serie.forEach((v, i) => {
-      if (v == null) return;
-      g.fillStyle = ind.cor; g.beginPath(); g.arc(X(i), Y(v), i === state.anoIdx ? 7 : 4.5, 0, Math.PI * 2); g.fill();
-      if (i === state.anoIdx) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.arc(X(i), Y(v), 10, 0, Math.PI * 2); g.stroke(); g.lineWidth = 1; }
+      if (v == null || i > idx) return;
+      g.fillStyle = ind.cor; g.beginPath(); g.arc(X(i), Y(v), i === idx ? 7 : 4.5, 0, Math.PI * 2); g.fill();
+      if (i === idx) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.arc(X(i), Y(v), 10, 0, Math.PI * 2); g.stroke(); g.lineWidth = 1; }
     });
 
-    const cards = calloutsDaSerie(ctx, state.indicadorKey);
+    // O desfecho: so quando a historia chega ao fim (calloutsDaSerie devolve
+    // [] antes disso - a mesma regra do painel 3D).
+    const cards = calloutsDaSerie(ctx, state.indicadorKey, idx);
     cards.forEach((c, k) => {
       const cor = c.tipo === "critico" ? "#ff9f6b" : "#7fd4ff";
       const w = 132, h = 40;
@@ -435,8 +497,6 @@
     });
     cv.dataset.callouts = JSON.stringify(cards.map((c) => [c.rotulo, c.valor]));
   }
-
-  window.addEventListener("resize", () => { if (state.painelAberto) updateAno(); });
 
   // ---- camada textual (zona de contexto) -----------------------------------
   function updateContexto() {
@@ -456,23 +516,98 @@
     });
   }
 
+  // ---- trilha (os passos que rolam) e regua (a faixa) -------------------------
+  function buildTrilha() {
+    DADOS.anos.forEach((ano, i) => {
+      const p = document.createElement("div");
+      p.className = "passo";
+      p.dataset.ano = String(i);
+      const ev = textoEventoAno(i);
+      p.innerHTML = `<div class="cartao"><div class="ano">${ano}</div>${ev ? `<div class="evento">${ev}</div>` : ""}</div>`;
+      $("trilha").appendChild(p);
+      const r = document.createElement("span");
+      r.textContent = String(ano);
+      $("regua").appendChild(r);
+    });
+  }
+
+  // Mesmo esquema de cores da faixa no piso (pintarFaixa, 70-faixa.js).
+  function pintarRegua() {
+    const cor = indicadorByKey(state.indicadorKey).cor;
+    Array.from($("regua").children).forEach((s, i) => {
+      const atual = i === state.anoIdx;
+      s.className = atual ? "atual" : i < state.anoIdx ? "passado" : "";
+      s.style.background = atual ? cor : "";
+    });
+    Array.from($("trilha").children).forEach((p, i) => {
+      p.classList.toggle("atual", i === state.anoIdx);
+      p.classList.toggle("passado", i < state.anoIdx);
+      p.querySelector(".cartao").style.borderLeftColor = i === state.anoIdx ? cor : "";
+    });
+  }
+
+  // Rolagem -> ano. A linha de leitura e o meio da janela; a posicao dela na
+  // trilha vira um "x" na faixa da imersiva e passa pela MESMA regra
+  // (anoNaFaixa, com a folga de 1/4 de passo nas fronteiras).
+  function progressoDaRolagem() {
+    const passos = $("trilha").children;
+    if (!passos.length) return 0;
+    const r0 = passos[0].getBoundingClientRect();
+    const h = r0.height || 1;
+    return (window.innerHeight * 0.5 - r0.top) / h; // em passos, 0 = topo de 2017
+  }
+  function atualizarPelaRolagem() {
+    const F = PLANTA.faixa;
+    const p = progressoDaRolagem();
+    const x = Math.max(F.x0 - 0.1, Math.min(F.x1 + 0.1, F.x0 + p * F.trecho));
+    const novo = anoNaFaixa(x, F.z, state.anoIdx);
+    if (novo !== state.anoIdx) definirAno(novo, "rolagem", { p: Math.round(p * 100) / 100 });
+  }
+  let rolagemPendente = false;
+  function aoRolar() {
+    if (rolagemPendente) return;
+    rolagemPendente = true;
+    requestAnimationFrame(() => {
+      rolagemPendente = false;
+      if (state.pronto) atualizarPelaRolagem();
+    });
+  }
+  // Para testes e para o pesquisador: leva a linha de leitura ao centro do
+  // passo de um ano (rolar de verdade - o ano muda pela regra da rolagem).
+  function rolarParaAno(idx) {
+    const passos = $("trilha").children;
+    const p = passos[clampIdx(idx, passos.length)];
+    const r = p.getBoundingClientRect();
+    window.scrollTo(0, window.scrollY + r.top + r.height / 2 - window.innerHeight * 0.5);
+    atualizarPelaRolagem();
+  }
+
+  window.addEventListener("scroll", aoRolar, { passive: true });
+  window.addEventListener("resize", () => { if (state.pronto) { updateAno(); atualizarPelaRolagem(); } });
+
   // ---- boot -----------------------------------------------------------------
   fetch("dados.json").then((r) => r.json()).then((d) => {
     DADOS = d;
+    state.anoIdx = 0;
     buildMesa();
+    buildTrilha();
     $("painelFechar").dataset.acao = "fechar";
     registrarAlvo($("painelFechar"));
+    renderPainel();
     updateMapa();
     updateContexto();
     pintarFoco();
+    pintarRegua();
     state.pronto = true;
     tlog("boot", { ambiente: "controle-2d", dados: d.meta ? d.meta.gerado : null });
+    atualizarPelaRolagem();
     if (modoEstudo) iniciarEstudo();
   });
 
   // ---- modo estudo ------------------------------------------------------------
   function iniciarEstudo() {
     const pacote = gerarTarefas(DADOS);
+    const anoAtual = () => (state.anoIdx == null ? null : DADOS.anos[state.anoIdx]);
     const acharTarefa = (id) => {
       const i = pacote.lista.findIndex((t) => t.id === id);
       return i < 0 ? null : { t: pacote.lista[i], n: i + 1 };
@@ -481,12 +616,12 @@
       const a = acharTarefa(id);
       if (!a) return;
       fixarLegenda(`TAREFA ${a.n}: ${a.t.pergunta}`);
-      tlog("tarefa", { id, evento: "exibida", origem });
+      tlog("tarefa", { id, evento: "exibida", via: origem, ano: anoAtual() });
     };
     const encerrar = (id, origem) => {
       fixarLegenda("");
       legenda("Resposta registrada. Obrigado!", 2500);
-      tlog("tarefa", { id: id || null, evento: "encerrada", origem });
+      tlog("tarefa", { id: id || null, evento: "encerrada", via: origem, ano: anoAtual() });
     };
     // Comandos da estacao do pesquisador (mesmo canal da condicao imersiva).
     if (window.Telemetry && Telemetry.aoComando) {
@@ -515,7 +650,7 @@
         const p = document.createElement("div"); p.style.fontWeight = "600"; p.textContent = `${t.id}: ${t.pergunta}`; area.appendChild(p);
         t.opcoes.forEach((op) => area.appendChild(botao(op, () => {
           const r = corrigirResposta(t, op);
-          tlog("tarefa", { id: t.id, evento: "resposta", resposta: op, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs: Math.round(performance.now() - tt0), origem: "painel-local" });
+          tlog("tarefa", { id: t.id, evento: "resposta", resposta: op, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs: Math.round(performance.now() - tt0), via: "painel-local", ano: anoAtual() });
           andamento = false; encerrar(t.id, "painel-local"); render();
         })));
         return;
@@ -524,7 +659,7 @@
       if (prox < pacote.lista.length) {
         area.appendChild(botao(`Iniciar tarefa ${prox + 1} de ${pacote.lista.length}`, () => {
           atual = prox; andamento = true; tt0 = performance.now();
-          tlog("tarefa", { id: pacote.lista[atual].id, evento: "inicio", origem: "painel-local" });
+          tlog("tarefa", { id: pacote.lista[atual].id, evento: "inicio", via: "painel-local", ano: anoAtual() });
           exibir(pacote.lista[atual].id, "painel-local");
           render();
         }, true));
@@ -537,7 +672,7 @@
   }
 
   // Handle de inspecao (testes e console), como o window.AMB da imersiva.
-  window.CONTROLE2D = { state, abrirPainel, fecharPainel, trocarIndicador, selecionarAno, setFoco };
+  window.CONTROLE2D = { state, abrirPainel, fecharPainel, trocarIndicador, selecionarAno, definirAno, rolarParaAno, progressoDaRolagem, setFoco };
 })();
 </script>
 </body>

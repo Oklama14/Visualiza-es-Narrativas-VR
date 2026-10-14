@@ -96,13 +96,18 @@
       </div>
 
       <div class="card" id="cardTreino">
-        <h2><span class="passo">3</span> Treino (só na imersiva)</h2>
+        <h2><span class="passo">3</span> Linha do tempo e treino (só na imersiva)</h2>
         <div class="linha">
+          <button id="btnAncorar" type="button" class="forte">Ancorar 2017 aqui</button>
+          <span id="ancoraEstado" class="fraco">—</span>
+        </div>
+        <p class="fraco">Com a pessoa de pé sobre a fita de <b>2017</b> no chão, olhando para a frente (a fita fica à direita dela), clique em "Ancorar". A linha do tempo virtual passa a coincidir com a fita. Ancore de novo se ela sair da fita sem andar (o Quest recentrou, por exemplo).</p>
+        <div class="linha" style="margin-top:8px">
           <button id="btnTreino" type="button" class="forte">Iniciar treino</button>
           <button id="btnTreinoFim" type="button">Encerrar treino</button>
           <span id="treinoEstado" class="fraco">—</span>
         </div>
-        <p class="fraco">Sala sem dados, três gestos: beliscar um alvo, teleportar por um disco, dar um passo real até a marca. Ao terminar, a pessoa volta para a porta.</p>
+        <p class="fraco">Sala sem dados, três gestos: beliscar um alvo, teleportar por um disco, dar um passo para o lado direito e ver o ano mudar (2017 → 2018). Ao terminar, a linha do tempo volta no mesmo lugar da fita e a pessoa fica um passo à direita de 2017: peça para ela voltar ao 2017 antes de marcar o início da exploração.</p>
       </div>
 
       <div class="card" id="cardExplorar">
@@ -129,7 +134,6 @@
       <div class="card" id="cardFim">
         <h2><span class="passo">7</span> Encerrar</h2>
         <div class="linha">
-          <button id="btnPorta" type="button">Levar à porta (imersiva)</button>
           <input id="txtMsg" type="text" placeholder="Mensagem curta para o participante" style="width:20em" maxlength="120" />
           <button id="btnMsg" type="button">Enviar</button>
         </div>
@@ -327,7 +331,7 @@
     const entregues = await comando({ tipo: "tarefa-iniciar", id: t.id });
     if (!entregues && !confirm("Nenhuma tela do participante recebeu a pergunta (página fechada ou sem ?estudo=1&p=...). Cronometrar mesmo assim?")) return;
     ativa = { t, inicio: performance.now() };
-    await registrar("tarefa", { id: t.id, evento: "inicio", origem: "estacao", exibidaEm: entregues });
+    await registrar("tarefa", { id: t.id, evento: "inicio", via: "estacao", exibidaEm: entregues });
     document.querySelectorAll(".tarefa").forEach((b) => b.classList.toggle("ativa", b.id === "tarefa-" + t.id));
     $("op-" + t.id).hidden = false;
   }
@@ -339,7 +343,7 @@
     $("op-" + t.id).hidden = true;
     $("crono-" + t.id).textContent = "";
     document.querySelectorAll(".tarefa").forEach((b) => b.classList.remove("ativa"));
-    await registrar("tarefa", { id: t.id, evento: "resposta", resposta, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs, origem: "estacao", motivo: motivo || null });
+    await registrar("tarefa", { id: t.id, evento: "resposta", resposta, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs, via: "estacao", motivo: motivo || null });
     await comando({ tipo: "tarefa-encerrar", id: t.id });
     prog().tarefas[t.id] = { resposta, correta: r.correta, tempoMs };
     if (Object.keys(prog().tarefas).length >= pacote.lista.length) marcarFeito("tarefas");
@@ -400,6 +404,17 @@
     } else {
       linhas.push(["Seção visível", r && r.pos && r.pos.secao ? r.pos.secao : "—"]);
     }
+    // Linha do tempo: em que ano a pessoa esta e por quais ja passou (ela
+    // so ve o desfecho - pior e melhor ano - ao chegar a 2024).
+    const ultimoAno = 2024;
+    const visitados = r && r.anosVisitados ? r.anosVisitados : [];
+    linhas.push(["Ano atual", r && r.ano != null ? `<b>${r.ano}</b>` : "—"]);
+    linhas.push(["Anos visitados", visitados.length ? `${visitados.length} de 8${visitados.indexOf(ultimoAno) >= 0 ? " · chegou a " + ultimoAno : ""}` : "—"]);
+    if (condicao() === "webxr") {
+      const anc = r && r.ancorada;
+      const idadeAnc = anc ? Math.round((estado.agora - anc.recebido) / 1000) : null;
+      $("ancoraEstado").textContent = anc ? `ancorada há ${idadeAnc} s (${anc.via || "?"})` : "ainda não ancorada";
+    }
     $("vivo").innerHTML = linhas.map(([a, b]) => `<div><span>${a}</span><span>${b}</span></div>`).join("");
     if (r && r.treino && r.treino.evento === "fim" && r.treino.concluido && !prog().feitos.treino) marcarFeito("treino");
     $("treinoEstado").textContent = r && r.treino ? `${r.treino.evento}${r.treino.etapa ? " · " + r.treino.etapa : ""}` : "—";
@@ -450,7 +465,10 @@
       marcarFeito("exploracao");
     }
   });
-  $("btnPorta").addEventListener("click", () => comando({ tipo: "ir-entrada" }));
+  $("btnAncorar").addEventListener("click", () => {
+    if (condicao() !== "webxr") { alert("A linha do tempo no chão existe só na condição imersiva."); return; }
+    comando({ tipo: "ancorar-faixa" });
+  });
   $("btnInterromper").addEventListener("click", async () => {
     const motivo = $("txtInterrupcao").value.trim() || "nao informado";
     if (ativa) await responder(ativa.t, null, "interrompida");

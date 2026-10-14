@@ -41,6 +41,14 @@ function getAudioListener() {
 
 function playAtEntity(entity, node, refDistance = 2, duracaoMs = 1200) {
   if (!entity || !entity.object3D) return false;
+  // Seguranca: uma fonte com matriz invalida (NaN) faz o Web Audio lancar
+  // erro dentro do render, e no headset isso congela a cena. Na duvida, som
+  // estereo.
+  const e = entity.object3D.matrixWorld.elements;
+  for (let k = 0; k < 16; k += 1) if (!isFinite(e[k])) return false;
+  const s = new AFRAME.THREE.Vector3();
+  entity.object3D.getWorldScale(s);
+  if (!(Math.abs(s.x) > 1e-4 && Math.abs(s.y) > 1e-4 && Math.abs(s.z) > 1e-4)) return false;
   const listener = getAudioListener();
   if (!listener) return false;
   const pa = new AFRAME.THREE.PositionalAudio(listener);
@@ -68,7 +76,7 @@ const PENTA = [220.0, 246.94, 293.66, 329.63, 392.0, 440.0, 493.88, 587.33, 659.
 
 // Nota por ano: altura = valor do indicador; pan = posicao do ano na serie.
 function playDataNote(valor, min, max, yearIdx, yearCount, srcEntity) {
-  if (!audioReady() || valor == null) return;
+  if (!audioReady() || valor == null || !isFinite(valor)) return;
   const t = max > min ? (valor - min) / (max - min) : 0.5;
   const freq = PENTA[Math.max(0, Math.min(PENTA.length - 1, Math.round(t * (PENTA.length - 1))))];
 
@@ -106,7 +114,9 @@ function playCompositionChord(frConc, frRet, frEvad, srcEntity) {
     { f: 392.0, v: frRet },
     { f: 261.63, v: frEvad },
   ].forEach(({ f, v }) => {
-    if (v == null || v <= 0) return;
+    // (!(v > 0) tambem barra NaN: um ano sem a contagem completa gerava uma
+    // fatia NaN, e o Web Audio lanca erro com rampa nao finita)
+    if (v == null || !(v > 0)) return;
     const o = audioCtx.createOscillator();
     const g = audioCtx.createGain();
     o.type = "triangle";

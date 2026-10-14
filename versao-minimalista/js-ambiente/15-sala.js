@@ -150,12 +150,12 @@ function buildPlacaSala(raiz) {
   );
   g.appendChild(
     el("a-text", Object.assign({
-      value: "1 ENTRAR   ·   2 OLHAR PARA UMA REGIÃO   ·   3 A VISUALIZAÇÃO SOBE",
+      value: "ANDE DE LADO: CADA PASSO É UM ANO   ·   OLHE UMA REGIÃO E BELISQUE",
       position: "0 -0.19 0.006",
       align: "center",
       color: "#7fd4ff",
       font: FONTE,
-    }, escalaTexto(66, 0.036)))
+    }, escalaTexto(68, 0.036)))
   );
 
   raiz.appendChild(g);
@@ -214,16 +214,16 @@ function contorno(raiz, cx, cz, w, d, cor, opacidade) {
   raiz.appendChild(faixa(t, d, cx + w / 2, cz));
 }
 
-// Discos de "voce esta aqui" / destinos de teleporte. As posicoes sao as do
-// desenho: a entrada embaixo e a posicao do usuario na quina do mapa.
+// Discos de teleporte: a volta para a linha do tempo (ao lado de 2017) e a
+// zona de contexto. A entrada nao tem mais disco: a pessoa comeca EM 2017.
 function posicionarDiscos() {
   const por = (entidade, x, z) => {
     if (!entidade) return;
     entidade.setAttribute("position", `${round2(x)} 0.014 ${round2(z)}`);
     applyPendingTransforms(entidade);
   };
-  por(dom.discoUsuario, PLANTA.usuario.x, PLANTA.usuario.z);
-  por(dom.discoEntrada, PLANTA.entrada.x, PLANTA.entrada.z);
+  // O disco verde e a volta para a linha do tempo (alem de 2024; 00-planta.js).
+  por(dom.discoUsuario, PLANTA.discoFaixa.x, PLANTA.discoFaixa.z);
   por(dom.discoContexto, PLANTA.contexto.cx, PLANTA.contexto.cz + PLANTA.contexto.d / 2 + 0.55);
 }
 
@@ -251,10 +251,15 @@ function posicionarPlanta() {
   dom.regioes.setAttribute("position", `0 ${round2(PLANTA.mapa.topo + 0.004)} 0`);
   dom.colunas.setAttribute("position", `0 ${PLANTA.mapa.topo} 0`);
   dom.mesaValorTitulo.setAttribute("position", `0 ${round2(PLANTA.mapa.topo + 0.1)} ${round2(-PLANTA.mapa.d / 2 - 0.04)}`);
+  // Botao de som na BORDA da mesa, do lado da faixa, inclinado para quem esta
+  // nela (os filhos ja deitam a -90; +35 aqui = placa a -55 graus). Na v0 ele
+  // ficava na linha das colunas, e da linha do tempo a coluna de Retencao o
+  // tapava do olhar.
   dom.somBtn.setAttribute(
     "position",
-    `${round2(PLANTA.mapa.w / 2 - 0.26)} ${round2(PLANTA.mapa.topo + 0.01)} ${round2(PLANTA.mapa.d / 2 - 0.13)}`
+    `${round2(PLANTA.mapa.w / 2 - 0.22)} ${round2(PLANTA.mapa.topo + 0.03)} ${round2(PLANTA.mapa.d / 2 + 0.02)}`
   );
+  dom.somBtn.setAttribute("rotation", "35 0 0");
 
   // Zona de contexto: pegada alinhada aos eixos (como na planta), mas as
   // anotacoes viram de frente para o ponto de observacao.
@@ -271,12 +276,9 @@ function posicionarPlanta() {
   dom.painelTopo.setAttribute("width", PLANTA.painel.w);
   dom.painelTopo.setAttribute("position", `0 ${round2(PLANTA.painel.h / 2 - 0.02)} 0.004`);
 
-  // Rig nasce NA ENTRADA, olhando para o mapa (acao 1 do desenho).
-  dom.cameraRig.setAttribute("position", `${PLANTA.entrada.x} 0 ${round2(PLANTA.entrada.z - 0.25)}`);
-  dom.cameraRig.setAttribute(
-    "rotation",
-    `0 ${olharPara({ x: PLANTA.entrada.x, z: PLANTA.entrada.z - 0.25 }, { x: PLANTA.mapa.cx, z: PLANTA.mapa.cz })} 0`
-  );
+  // O rig nasce com a cabeca sobre 2017, na linha do tempo, de frente para a
+  // mesa (70-faixa.js): a historia comeca no comeco.
+  ancoraInicial();
 
   applyPendingTransforms(dom.mesaMapa);
   applyPendingTransforms(dom.contextoZona);

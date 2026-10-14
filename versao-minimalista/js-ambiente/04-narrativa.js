@@ -6,15 +6,23 @@
 // indicador reescreve a parede de texto inteira.
 // ----------------------------------------------------------------------------
 
-function computeNarrative(ctx, key) {
+// ateIdx (opcional): a historia so conhece a serie ATE este ano - e o que o
+// strollytelling revela a cada passo na linha do tempo (e a rolagem, na 2D).
+// Sem ateIdx (ou no ultimo ano), a narrativa e a da serie inteira, com o
+// desfecho ("o maior valor da serie foi ...").
+function computeNarrative(ctx, key, ateIdx) {
   const indicador = indicadorByKey(key);
   const serie = ctx.series[key];
   const anos = DADOS.anos;
-  const validos = serie.map((v, i) => ({ v, ano: anos[i], i })).filter((d) => d.v != null);
+  const todos = serie.map((v, i) => ({ v, ano: anos[i], i })).filter((d) => d.v != null);
+  const ultimoDaSerie = todos.length ? todos[todos.length - 1].i : -1;
+  const completa = ateIdx == null || ateIdx >= ultimoDaSerie;
+  const validos = completa ? todos : todos.filter((d) => d.i <= ateIdx);
 
   if (!validos.length) {
-    const t = `Não há dados de ${rotulo(indicador.label).toLowerCase()} para ${rotuloContexto(ctx)}.`;
-    return { manchete: rotuloContexto(ctx), texto: t, comparativo: "", peakIdx: -1, valleyIdx: -1 };
+    const t = `Não há dados de ${rotulo(indicador.label).toLowerCase()} para ${rotuloContexto(ctx)}` +
+      (completa ? "." : ` até ${anos[ateIdx]}.`);
+    return { manchete: rotuloContexto(ctx), texto: t, comparativo: "", peakIdx: -1, valleyIdx: -1, completa };
   }
 
   const primeiro = validos[0];
@@ -43,15 +51,29 @@ function computeNarrative(ctx, key) {
 
   // Sem setas: a fonte MSDF local cobre o Latin-1, nao simbolos - uma seta
   // viraria tofu dentro do headset, onde nao ha como conferir.
-  const manchete =
-    `${rotuloCurto(ctx)}: ${rotulo(indicador.label).toLowerCase()} ${fase} ` +
-    `(de ${fmt(primeiro.v)}% a ${fmt(ultimo.v)}%)`;
-  const texto =
-    `De ${fmt(primeiro.v)}% em ${primeiro.ano} para ${fmt(ultimo.v)}% em ${ultimo.ano}, ` +
-    `com tendência de ${tendencia}. O ${rotuloCritico} valor da série foi ` +
-    `${fmt(critico.v)}% em ${critico.ano}.`;
+  const nomeInd = rotulo(indicador.label).toLowerCase();
+  if (validos.length === 1) {
+    // Primeiro passo da historia: um ano so, nada a comparar ainda.
+    return {
+      manchete: `${rotuloCurto(ctx)}: ${nomeInd} em ${primeiro.ano} (${fmt(primeiro.v)}%)`,
+      texto: `Em ${primeiro.ano}: ${fmt(primeiro.v)}%.`,
+      comparativo,
+      peakIdx: maior.i,
+      valleyIdx: menor.i,
+      ultimoIdx: ultimo.i,
+      completa,
+    };
+  }
+  const manchete = `${rotuloCurto(ctx)}: ${nomeInd} ${fase} (de ${fmt(primeiro.v)}% a ${fmt(ultimo.v)}%)`;
+  // O desfecho (o ano extremo da serie) so existe quando a historia chega ao fim.
+  const texto = completa
+    ? `De ${fmt(primeiro.v)}% em ${primeiro.ano} para ${fmt(ultimo.v)}% em ${ultimo.ano}, ` +
+      `com tendência de ${tendencia}. O ${rotuloCritico} valor da série foi ` +
+      `${fmt(critico.v)}% em ${critico.ano}.`
+    : `De ${fmt(primeiro.v)}% em ${primeiro.ano} para ${fmt(ultimo.v)}% em ${ultimo.ano}, ` +
+      `com tendência de ${tendencia} até aqui.`;
 
-  return { manchete, texto, comparativo, peakIdx: maior.i, valleyIdx: menor.i, ultimoIdx: ultimo.i };
+  return { manchete, texto, comparativo, peakIdx: maior.i, valleyIdx: menor.i, ultimoIdx: ultimo.i, completa };
 }
 
 // Evento externo que atravessa a serie (a pandemia esta em dados.json).
@@ -63,7 +85,7 @@ function eventoDe(ano) {
 // manchete (o que aconteceu), leitura (como a serie se move), contexto (com o
 // que comparar / o que atravessou a serie).
 function anotacoes(ctx, key, anoIdx) {
-  const n = computeNarrative(ctx, key);
+  const n = computeNarrative(ctx, key, anoIdx);
   const indicador = indicadorByKey(key);
   const anos = DADOS.anos;
   const serie = ctx.series[key];
@@ -160,11 +182,33 @@ function reparte100(comp) {
 
 const TEXTO_PAINEL_KICKER = "VISUALIZAÇÃO DA REGIÃO";
 
+// O painel mostra o BRASIL quando nenhuma regiao esta aberta.
+function kickerPainel(ctx) {
+  return ctx && ctx.tipo === "brasil" ? "VISUALIZAÇÃO DO BRASIL" : TEXTO_PAINEL_KICKER;
+}
+
+// Valor de uma serie no ano da linha do tempo (sem ano: o ultimo valor).
+function valorNoAno(serie, idx) {
+  return idx == null ? latestValue(serie) : serie[idx] == null ? null : serie[idx];
+}
+
+// O ano grande do painel e, se houver, o evento daquele ano.
+function textoAnoPainel(idx) {
+  return String(DADOS.anos[idx]);
+}
+function textoEventoAno(idx) {
+  const ev = eventoDe(DADOS.anos[idx]);
+  return ev ? ev.titulo : "";
+}
+
 // Os dois cartoes do grafico: o ano critico e o outro extremo (um so se os
-// dois caem no mesmo ano). tipo "critico" | "outro".
-function calloutsDaSerie(ctx, key) {
+// dois caem no mesmo ano). tipo "critico" | "outro". Na linha do tempo, os
+// cartoes sao o DESFECHO: so aparecem quando a historia chega ao ultimo ano
+// (ateIdx no fim da serie); antes disso, a lista vem vazia.
+function calloutsDaSerie(ctx, key, ateIdx) {
   const ind = indicadorByKey(key);
   const serie = ctx.series[key];
+  if (ateIdx != null && ateIdx < lastValidIndex(serie)) return [];
   const narr = computeNarrative(ctx, key);
   const r = rotulosCallout(ind.sentido);
   const lista = [];
@@ -202,9 +246,10 @@ function textosParede(ctx, idx) {
   };
 }
 
-function tituloMesa(key) {
+function tituloMesa(key, anoIdx) {
   const ind = indicadorByKey(key);
-  return `${rotulo(ind.label).toUpperCase()} EM ${DADOS.anos[DADOS.anos.length - 1]}   ·   1 BLOCO = 1%`;
+  const ano = DADOS.anos[anoIdx == null ? DADOS.anos.length - 1 : anoIdx];
+  return `${rotulo(ind.label).toUpperCase()} EM ${ano}   ·   1 BLOCO = 1%`;
 }
 
 function textoValorRegiao(v) {
@@ -231,5 +276,6 @@ function rotuloEvento(ev) {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { computeNarrative, anotacoes, composicaoDoAno, ultimoAnoComComposicao, rotulosCallout, reparte100,
-    calloutsDaSerie, textoLeituraAno, textosParede, tituloMesa, textoValorRegiao, rotuloCurtoIndicador, rotuloEvento, blocosPara, TEXTO_PAINEL_KICKER };
+    calloutsDaSerie, textoLeituraAno, textosParede, tituloMesa, textoValorRegiao, rotuloCurtoIndicador, rotuloEvento, blocosPara, TEXTO_PAINEL_KICKER,
+    kickerPainel, valorNoAno, textoAnoPainel, textoEventoAno };
 }

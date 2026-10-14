@@ -15,13 +15,15 @@
 //
 // O que verifica:
 //   XR1  a sessao imersiva abre e a cabeca fica a ~1,6 m (nao 3,2 m)
-//   XR2  todo alvo de olhar e alcancavel do ponto de observacao (inclusive os
-//        que ficam a menos de 1 m do olho, como as colunas e o botao de som)
+//   XR2  todo alvo de olhar e alcancavel do centro da linha do tempo
+//        (inclusive os que ficam a menos de 1 m do olho, como as colunas e o
+//        botao de som)
 //   XR3  UMA pinca = UMA confirmacao (o botao de som nao pode ligar e desligar)
 //   XR4  UM gatilho = UMA confirmacao
 //   XR5  pinca numa regiao abre o painel
 //   XR6  o painel e opaco ao olhar (nao da para focar uma regiao "atraves" dele)
-//   XR7  painel fechado nao deixa alvos de ano invisiveis respondendo ao olhar
+//   XR7  o grafico nao tem alvos de ano (o ano e do corpo) e, sem regiao, o
+//        "fechar" nao responde ao olhar
 //   XR8  o painel inclina PARA quem olha (normal apontando para o olho)
 //   XR9  teleporte poe a CABECA no disco, mesmo com o corpo fora do centro
 //   XR10 legenda e reticulo desenhados por cima do mundo (nao somem na mesa)
@@ -30,6 +32,13 @@
 //   XR13 console limpo durante toda a sessao
 //   XR14 o modelo da mao carrega sem internet (assets/maos/)
 //   XR15 ao pegar os controles, o modelo da mao some (nao fica congelado no ar)
+//   XR16 a 1a entrada em VR ancora a linha do tempo: 2017 sob a cabeca
+//   XR17 andar de lado de 2017 a 2024 passa por todos os anos, em ordem
+//   XR18 balancar o corpo numa fronteira (+-3 cm) nao pisca o ano
+//   XR19 parado (com o tremor natural da cabeca) por 10 s, o ano nao muda
+//   XR20 fora do corredor da faixa (perto da mesa) o ano fica como esta
+//   XR21 da zona de contexto, o olhar alcanca o disco de volta; voltar por ele
+//        RESTAURA a ancora: a faixa continua no mesmo lugar da sala real
 // ----------------------------------------------------------------------------
 
 const { chromium } = require("playwright");
@@ -249,7 +258,24 @@ const registra = (id, passou, msg) => resultados.push({ id, passou, msg });
     `antialias ${xr11.antialias ? "ligado" : "DESLIGADO"}; taxa pedida ${xr11.frameRate} Hz; foveacao ${xr11.foveacao}`
   );
 
-  // ---- vai para o ponto de observacao do desenho ---------------------------
+  // ---- XR16: a 1a entrada em VR ancora a linha do tempo --------------------
+  const ancorou = await page
+    .waitForFunction(() => window.AMB.FAIXA && window.AMB.FAIXA.ancoradaEmVR, null, { timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  await quadros(6);
+  const xr16 = await page.evaluate(() => {
+    const F = window.AMB.PLANTA.faixa;
+    const c = window.__sim.cabecaMundo();
+    return { dx: +(c.x - (F.x0 + F.trecho / 2)).toFixed(3), dz: +(c.z - F.z).toFixed(3), ano: window.AMB.state.anoIdx };
+  });
+  registra(
+    "XR16",
+    ancorou && Math.abs(xr16.dx) < 0.03 && Math.abs(xr16.dz) < 0.03 && xr16.ano === 0,
+    ancorou ? `ancorada na entrada em VR: cabeca a (${xr16.dx}, ${xr16.dz}) m do centro de 2017; ano idx ${xr16.ano}` : "a entrada em VR NAO ancorou a linha do tempo"
+  );
+
+  // ---- vai para o centro da linha do tempo (o ponto de observacao) ----------
   await page.evaluate(() => window.AMB.irPara("usuario"));
   await pausa(400);
   await page.evaluate(() => window.__sim.cabecaLocal(0, 1.6, 0));
@@ -267,9 +293,6 @@ const registra = (id, passou, msg) => resultados.push({ id, passou, msg });
   const falhasOlhar = [];
   const distancias = [];
   for (const a of alvos) {
-    // O disco do ponto de observacao fica sob os pes de quem esta nele; mira-lo
-    // de cima e geometricamente degenerado. Pula.
-    if (a.chave === "usuario") continue;
     const r = await page.evaluate(async (sel) => {
       const el = document.querySelector(sel);
       // Coluna de indicador: mira o BLOCO de voxels (o que a pessoa ve), nao
@@ -294,7 +317,7 @@ const registra = (id, passou, msg) => resultados.push({ id, passou, msg });
   registra(
     "XR2",
     falhasOlhar.length === 0,
-    falhasOlhar.length ? `alvos fora do alcance do olhar: ${falhasOlhar.join("; ")}` : `${alvos.length - 1} alvos alcancaveis (${distancias.join(", ")})`
+    falhasOlhar.length ? `alvos fora do alcance do olhar: ${falhasOlhar.join("; ")}` : `${alvos.length} alvos alcancaveis (${distancias.join(", ")})`
   );
 
   // ---- XR3: uma pinca = uma confirmacao (botao de som) ----------------------
@@ -423,22 +446,36 @@ const registra = (id, passou, msg) => resultados.push({ id, passou, msg });
   });
   registra("XR6", xr6.length === 0, xr6.length ? `o olhar atravessa o painel: ${xr6.join("; ")}` : "painel barra o olhar (nada atras dele responde)");
 
-  // ---- XR7: painel fechado nao deixa alvos fantasmas -----------------------
+  // ---- XR7: o grafico nao tem alvos de ano ----------------------------------
+  // Na v1 o ano e do corpo. Com a regiao aberta e depois de "fechar" (o painel
+  // volta ao Brasil), olhar o grafico e o "x" nao muda nada.
   const xr7 = await page.evaluate(async () => {
     const painel = document.getElementById("painel");
     const pontos = [-1.0, -0.5, 0.0, 0.3].map((x) => window.__sim.emMundo(painel, { x, y: -0.1, z: 0 }));
+    const fechar = window.__sim.centro(document.getElementById("painelFechar"));
+    const fantasmas = [];
+    const varrer = async (comFechar) => {
+      for (const p of pontos.concat(comFechar ? [] : [fechar])) {
+        window.__sim.olharMundo(p);
+        await window.__sim.quadros(8);
+        const s = window.__sim.sobOlhar();
+        if (s && (s.dados.ano != null || (!comFechar && s.id === "painelFechar"))) fantasmas.push(JSON.stringify(s.dados) + (s.id ? "#" + s.id : ""));
+      }
+    };
+    const nAlvosAno = document.querySelectorAll(".alvo-ano").length;
+    await varrer(true);
     window.AMB.fecharPainel();
     await window.__sim.quadros(6);
-    const fantasmas = [];
-    for (const p of pontos) {
-      window.__sim.olharMundo(p);
-      await window.__sim.quadros(8);
-      const s = window.__sim.sobOlhar();
-      if (s && (s.dados.ano != null || s.id === "painelFechar")) fantasmas.push(JSON.stringify(s.dados));
-    }
-    return fantasmas;
+    await varrer(false);
+    return { fantasmas, nAlvosAno, titulo: document.getElementById("painelTitulo").getAttribute("value") };
   });
-  registra("XR7", xr7.length === 0, xr7.length ? `painel FECHADO e o olhar ainda pega: ${xr7.join(", ")}` : "sem alvos fantasmas com o painel fechado");
+  registra(
+    "XR7",
+    xr7.fantasmas.length === 0 && xr7.nAlvosAno === 0 && /Brasil/i.test(xr7.titulo),
+    xr7.fantasmas.length || xr7.nAlvosAno
+      ? `alvos de ano: ${xr7.nAlvosAno}; o olhar pega: ${xr7.fantasmas.join(", ")}`
+      : `nenhum alvo de ano no grafico; depois de fechar, o painel mostra "${xr7.titulo}" e o "x" nao responde`
+  );
 
   // ---- XR10: legenda e reticulo por cima do mundo --------------------------
   const xr10 = await page.evaluate(() => {
@@ -495,6 +532,126 @@ const registra = (id, passou, msg) => resultados.push({ id, passou, msg });
     xr9.erro < 0.1 && xr9.angOlhar < 15,
     `cabeca a ${xr9.erro} m do disco de destino; olhar a ${xr9.angOlhar} graus da zona de contexto`
   );
+
+  // ---- XR17-XR21: a linha do tempo no piso ---------------------------------
+  // A cabeca anda no espaco do headset (local-floor). Ancorada olhando para a
+  // frente, x local = andar de lado sobre a faixa.
+  await page.evaluate(async () => {
+    window.__sim.cabecaLocal(0, 1.6, 0);
+    __xr.quaternion.set(0, 0, 0, 1);
+    await window.__sim.quadros(4);
+    await window.AMB.ancorarFaixa("teste");
+    await window.__sim.quadros(6);
+  });
+  const anoAgora = () => page.evaluate(() => window.AMB.state.anoIdx);
+
+  // XR17: de 2017 a 2024, 2 cm por vez
+  const xr17 = await page.evaluate(async () => {
+    const seq = [];
+    for (let x = 0; x <= 1.56; x += 0.02) {
+      window.__sim.cabecaLocal(+x.toFixed(2), 1.6, 0);
+      await window.__sim.quadros(2);
+      const a = window.AMB.state.anoIdx;
+      if (seq[seq.length - 1] !== a) seq.push(a);
+    }
+    return seq;
+  });
+  registra(
+    "XR17",
+    xr17.join(",") === "0,1,2,3,4,5,6,7",
+    `andando de lado de 2017 a 2024, os anos foram: ${xr17.map((i) => 2017 + i).join(" > ")}`
+  );
+
+  // XR18: balancar +-3 cm na fronteira 2020|2021 (x local 0,7)
+  await page.evaluate(async () => {
+    window.__sim.cabecaLocal(0.6, 1.6, 0);
+    await window.__sim.quadros(4);
+  });
+  const xr18 = await page.evaluate(async () => {
+    const inicio = window.AMB.state.anoIdx;
+    let trocas = 0;
+    let ultimo = inicio;
+    for (let k = 0; k < 30; k += 1) {
+      window.__sim.cabecaLocal(0.7 + (k % 2 ? 0.03 : -0.03), 1.6, 0);
+      await window.__sim.quadros(2);
+      if (window.AMB.state.anoIdx !== ultimo) {
+        trocas += 1;
+        ultimo = window.AMB.state.anoIdx;
+      }
+    }
+    return { inicio, trocas };
+  });
+  registra("XR18", xr18.trocas === 0, `30 balancos de +-3 cm na fronteira 2020|2021: ${xr18.trocas} troca(s) de ano`);
+
+  // XR19: parado sobre a fronteira, com tremor de +-1 cm, por 10 s
+  const xr19 = await page.evaluate(async () => {
+    const inicio = window.AMB.state.anoIdx;
+    let trocas = 0;
+    const t0 = performance.now();
+    let n = 0;
+    while (performance.now() - t0 < 10000) {
+      window.__sim.cabecaLocal(0.7 + (Math.random() - 0.5) * 0.02, 1.6 + (Math.random() - 0.5) * 0.01, (Math.random() - 0.5) * 0.02);
+      await window.__sim.quadros(1);
+      n += 1;
+      if (window.AMB.state.anoIdx !== inicio) trocas += 1;
+    }
+    return { trocas, n };
+  });
+  registra("XR19", xr19.trocas === 0, `10 s parado com tremor de +-1 cm (${xr19.n} quadros): ${xr19.trocas} quadro(s) com o ano trocado`);
+
+  // XR20: fora do corredor (meio metro a frente, perto da mesa)
+  const xr20 = await page.evaluate(async () => {
+    window.__sim.cabecaLocal(0.3, 1.6, 0);
+    await window.__sim.quadros(4);
+    const antes = window.AMB.state.anoIdx;
+    window.__sim.cabecaLocal(0.3, 1.6, -0.55);
+    await window.__sim.quadros(4);
+    const mudou = [];
+    for (let x = 0.3; x <= 1.5; x += 0.1) {
+      window.__sim.cabecaLocal(+x.toFixed(2), 1.6, -0.55);
+      await window.__sim.quadros(2);
+      if (window.AMB.state.anoIdx !== antes) mudou.push(+x.toFixed(2));
+    }
+    return { antes, mudou };
+  });
+  registra("XR20", xr20.mudou.length === 0, xr20.mudou.length ? `fora do corredor o ano mudou em x = ${xr20.mudou.join(", ")}` : `fora do corredor o ano ficou em ${2017 + xr20.antes}`);
+
+  // XR21: teleporte para o contexto e volta pelo disco da faixa
+  const xr21 = await page.evaluate(async () => {
+    window.__sim.cabecaLocal(1.0, 1.6, 0);
+    await window.__sim.quadros(4);
+    const anoAntes = window.AMB.state.anoIdx;
+    const rig = document.getElementById("cameraRig").object3D;
+    const antes = { x: rig.position.x, z: rig.position.z, g: rig.rotation.y };
+    await window.AMB.irPara("contexto");
+    await new Promise((r) => setTimeout(r, 300));
+    await window.__sim.quadros(4);
+    const longe = window.__sim.cabecaMundo();
+    // volta pelo disco: da zona de contexto, o olhar tem de alcanca-lo
+    const disco = document.querySelector('[data-destino="faixa"]');
+    window.__sim.olharMundo(window.__sim.centro(disco));
+    await window.__sim.quadros(8);
+    const sob = window.__sim.sobOlhar();
+    const alcancou = !!(sob && sob.dados.destino === "faixa");
+    await window.AMB.confirmar(disco);
+    await new Promise((r) => setTimeout(r, 300));
+    await window.__sim.quadros(6);
+    const depois = { x: rig.position.x, z: rig.position.z, g: rig.rotation.y };
+    return {
+      alcancou,
+      anoAntes,
+      anoDepois: window.AMB.state.anoIdx,
+      longeZ: +longe.z.toFixed(2),
+      erro: +Math.hypot(depois.x - antes.x, depois.z - antes.z).toFixed(3),
+      erroGuinada: +(((depois.g - antes.g) * 180) / Math.PI).toFixed(1),
+    };
+  });
+  registra(
+    "XR21",
+    xr21.alcancou && xr21.erro < 0.01 && Math.abs(xr21.erroGuinada) < 0.5 && xr21.anoDepois === xr21.anoAntes,
+    `da zona de contexto o olhar ${xr21.alcancou ? "alcanca" : "NAO alcanca"} o disco de volta; a faixa ficou a ${xr21.erro} m e ${xr21.erroGuinada} graus de onde estava; ano ${2017 + xr21.anoAntes} -> ${2017 + xr21.anoDepois}`
+  );
+  await page.evaluate(() => window.__sim.cabecaLocal(0, 1.6, 0));
 
   // ---- XR12: draw calls por quadro (painel aberto) -------------------------
   await page.evaluate(() => {

@@ -4,8 +4,10 @@
 // Sobe o server.js (com a api do estudo), abre a estacao do pesquisador, um
 // Meta Quest 2 emulado (IWER) na condicao imersiva e depois a condicao 2D, e
 // conduz uma sessao completa como o pesquisador faria: triagem, SSQ antes,
-// treino de 3 gestos, exploracao (andando, teleportando, abrindo painel), as
-// 3 tarefas pela estacao, SSQ depois. No meio, o "Wi-Fi cai" por alguns
+// ancorar a linha do tempo, treino de 3 gestos (o 3o e o passo de lado que
+// muda o ano), exploracao (andando de 2017 a 2024 sobre a faixa, abrindo o
+// painel de uma regiao, teleportando ao contexto e voltando pelo disco), as 3
+// tarefas pela estacao, SSQ depois. Na 2D, a pagina e rolada ate 2024. No meio, o "Wi-Fi cai" por alguns
 // segundos. No fim roda estudo/analisar.js sobre o .jsonl gravado e confere
 // se as variaveis dependentes saem dele - e o "rode a analise no seu proprio
 // JSON antes do piloto" do conselho, automatizado.
@@ -179,12 +181,39 @@ const SSQ_POS = { 1: 1, 2: 1, 3: 0, 4: 2, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 1, 1
     .catch(() => false);
   registra("E1", conectado, conectado ? "estacao ve o headset conectado (canal de comandos aberto)" : "a estacao NAO viu o headset conectar");
 
+  // ---- ancorar a linha do tempo (pessoa sobre a fita de 2017) ----------------
+  await vr.evaluate(() => {
+    window.__sim.cabecaLocal(0.4, 1.6, -0.2); // em pe sobre a fita, fora do centro do guardian
+    __xr.quaternion.set(0, 0, 0, 1);
+  });
+  await quadros(6);
+  const ancorasAntes = await vr.evaluate(() => window.Telemetry.eventos.filter((e) => e.tipo === "faixa").length);
+  await est.click("#btnAncorar");
+  await vr.waitForFunction((n) => window.Telemetry.eventos.filter((e) => e.tipo === "faixa").length > n, ancorasAntes, { timeout: 5000 }).catch(() => {});
+  await vr.waitForTimeout(300);
+  await quadros(6);
+  const anc = await vr.evaluate(() => {
+    const F = window.AMB.PLANTA.faixa;
+    const c = new AFRAME.THREE.Vector3();
+    document.getElementById("camera").object3D.getWorldPosition(c);
+    const ult = window.Telemetry.eventos.filter((e) => e.tipo === "faixa").pop();
+    return { dx: +(c.x - (F.x0 + F.trecho / 2)).toFixed(3), dz: +(c.z - F.z).toFixed(3), ano: window.AMB.state.anoIdx, via: ult ? ult.via : null, ancora: window.AMB.FAIXA.ancora };
+  });
+  const ancoraEst = await est
+    .waitForFunction(() => /ancorada/.test(document.getElementById("ancoraEstado").textContent), null, { timeout: 5000 })
+    .then(() => est.evaluate(() => document.getElementById("ancoraEstado").textContent))
+    .catch(() => "");
+  registra(
+    "E12",
+    Math.abs(anc.dx) < 0.03 && Math.abs(anc.dz) < 0.03 && anc.ano === 0 && anc.via === "estacao" && /ancorada/.test(ancoraEst),
+    `"Ancorar 2017 aqui": cabeca a (${anc.dx}, ${anc.dz}) m do centro de 2017, ano ${2017 + anc.ano}; estacao: "${ancoraEst}"`
+  );
+
   // ---- treino ----------------------------------------------------------------
   await est.click("#btnTreino");
   await vr.waitForFunction(() => window.AMB.state.treino, null, { timeout: 5000 }).catch(() => {});
   const t0 = await vr.evaluate(() => ({ treino: window.AMB.state.treino, legenda: window.__sim.legenda(), mesa: document.getElementById("mesaMapa").object3D.visible }));
   await vr.waitForTimeout(300);
-  await vr.evaluate(() => window.__sim.cabecaLocal(0, 1.6, 0));
   await quadros(6);
   await mirar('[data-treino="pinca"]');
   await pinca();
@@ -193,28 +222,66 @@ const SSQ_POS = { 1: 1, 2: 1, 3: 0, 4: 2, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 1, 1
   await pinca();
   await vr.waitForTimeout(400);
   const t2 = await vr.evaluate(() => window.__sim.legenda());
-  // passo real ate a marca amarela
+  // passo real PARA O LADO, ate o 2018 da mini linha do tempo
+  const anoGrandeAntes = await vr.evaluate(() => TREINO.partes.anoGrande.getAttribute("value"));
   await vr.evaluate(() => window.__sim.andarPara(TREINO_PONTOS.marca.x, TREINO_PONTOS.marca.z, 6));
-  await vr.waitForTimeout(600);
-  const t3 = await vr.evaluate(() => ({ treino: window.AMB.state.treino, mesa: document.getElementById("mesaMapa").object3D.visible, clicaveis: document.querySelectorAll(".alvo-regiao.clickable").length }));
+  const anoGrandeDepois = await vr.evaluate(() => TREINO.partes.anoGrande.getAttribute("value"));
+  await vr.waitForFunction(() => !window.AMB.state.treino, null, { timeout: 5000 }).catch(() => {});
+  await vr.waitForTimeout(400);
+  await quadros(6);
+  const t3 = await vr.evaluate(() => {
+    const rig = document.getElementById("cameraRig").object3D.position;
+    const a = window.AMB.FAIXA.ancora;
+    return {
+      treino: window.AMB.state.treino,
+      mesa: document.getElementById("mesaMapa").object3D.visible,
+      faixa: document.getElementById("faixaTempo").object3D.visible,
+      painel: document.getElementById("painel").object3D.visible,
+      clicaveis: document.querySelectorAll(".alvo-regiao.clickable").length,
+      naAncora: Math.hypot(rig.x - a.x, rig.z - a.z) < 0.01,
+      ano: window.AMB.state.anoIdx,
+      legenda: window.__sim.legenda(),
+    };
+  });
   registra(
     "E2",
-    t0.treino && !t0.mesa && /TREINO 1/.test(t0.legenda) && /TREINO 2/.test(t1) && /TREINO 3/.test(t2) && !t3.treino && t3.mesa && t3.clicaveis === 5,
+    t0.treino && !t0.mesa && /TREINO 1/.test(t0.legenda) && /TREINO 2/.test(t1) && /TREINO 3/.test(t2) && anoGrandeAntes === "2017" && anoGrandeDepois === "2018" &&
+      !t3.treino && t3.mesa && t3.faixa && t3.painel && t3.clicaveis === 5 && t3.naAncora && t3.ano >= 1 && /Volte para o 2017/.test(t3.legenda),
     `treino: sala sem dados ${!t0.mesa}; etapas ${[t0.legenda, t1, t2].map((l) => (l.match(/TREINO \d/) || ["?"])[0]).join(" -> ")}; ` +
-      `concluido ${!t3.treino}; mesa de volta ${t3.mesa}; ${t3.clicaveis}/5 regioes respondem ao olhar`
+      `passo de lado: ${anoGrandeAntes} -> ${anoGrandeDepois}; concluido ${!t3.treino}; mesa, faixa e painel de volta ${t3.mesa && t3.faixa && t3.painel}; ` +
+      `ancora restaurada ${t3.naAncora} (a pessoa, um passo a direita, esta em ${2017 + t3.ano}); ${t3.clicaveis}/5 regioes respondem ao olhar`
   );
 
   // ---- exploracao ------------------------------------------------------------
+  // A pessoa volta ao 2017 (a fita) e o pesquisador marca o inicio.
+  await vr.evaluate(() => window.__sim.cabecaLocal(0.4, 1.6, -0.2));
+  await quadros(8);
   await est.click("#btnExpIni");
-  await vr.evaluate(() => window.__sim.cabecaLocal(0, 1.6, 0));
-  await vr.evaluate(() => window.AMB.irPara("usuario"));
-  await vr.waitForTimeout(400);
-  // anda ~1,2 m de verdade em volta do ponto de observacao
-  for (let k = 0; k <= 12; k += 1) {
-    await vr.evaluate((x) => window.__sim.cabecaLocal(x, 1.6, 0), -k * 0.1);
-    await quadros(8);
+  // anda de lado de 2017 a 2024 (1,5 m), de frente para a mesa
+  const caminho = [];
+  for (let k = 0; k <= 15; k += 1) {
+    await vr.evaluate((x) => window.__sim.cabecaLocal(x, 1.6, -0.2), 0.4 + k * 0.1);
+    await quadros(6);
     await vr.waitForTimeout(80);
+    const a = await vr.evaluate(() => window.AMB.state.anoIdx);
+    if (caminho[caminho.length - 1] !== a) caminho.push(a);
   }
+  const fimDaHistoria = await vr.evaluate(() => ({
+    callouts: Array.from(document.querySelectorAll("#chartAnotacoes .callout")).filter((g) => g.object3D.visible).length,
+    estacaoAno: null,
+  }));
+  const vivoEst = await est
+    .waitForFunction(() => /chegou a 2024/.test(document.getElementById("vivo").textContent), null, { timeout: 6000 })
+    .then(() => true)
+    .catch(() => false);
+  registra(
+    "E13",
+    caminho.join(",") === "0,1,2,3,4,5,6,7" && fimDaHistoria.callouts > 0 && vivoEst,
+    `andando sobre a faixa: ${caminho.map((i) => 2017 + i).join(" > ")}; desfecho visivel em 2024 (${fimDaHistoria.callouts} cartoes); estacao mostra "chegou a 2024": ${vivoEst}`
+  );
+  // volta ao meio da faixa e abre o Nordeste pelo olhar
+  await vr.evaluate(() => window.__sim.cabecaLocal(1.1, 1.6, -0.2));
+  await quadros(8);
   await mirar('.alvo-regiao[data-regiao="nordeste"]');
   await vr.waitForTimeout(700); // amostras de olhar na regiao
   await pinca();
@@ -222,23 +289,33 @@ const SSQ_POS = { 1: 1, 2: 1, 3: 0, 4: 2, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 1, 1
   const painel = await vr.evaluate(() => window.AMB.state.painelAberto);
 
   // "Wi-Fi cai" por 4 s: os lotes ficam na reserva e sao reenviados depois.
+  // Nesse meio tempo, vai a zona de contexto e volta pelo disco da faixa.
   await vr.route("**/api/estudo/eventos", (route) => route.abort());
+  const anoAntesCtx = await vr.evaluate(() => window.AMB.state.anoIdx);
   await mirar('[data-destino="contexto"]');
   await pinca();
-  await vr.waitForTimeout(4000);
+  await vr.waitForTimeout(1500);
+  await mirar('[data-destino="faixa"]');
+  await pinca();
+  await vr.waitForTimeout(1200);
+  await quadros(6);
+  const anoDepoisCtx = await vr.evaluate(() => window.AMB.state.anoIdx);
+  await vr.waitForTimeout(1300);
   const pendentesNaQueda = await vr.evaluate(() => window.Telemetry.pendentes());
   const reserva = await vr.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("vrlab.reserva.")).length);
   await vr.unroute("**/api/estudo/eventos");
 
   // ---- tarefas ---------------------------------------------------------------
+  registra("E14", anoDepoisCtx === anoAntesCtx, `contexto e volta pelo disco: ano ${2017 + anoAntesCtx} -> ${2017 + anoDepoisCtx} (a faixa nao saiu do lugar)`);
   const legendaT = [];
   for (const [id, resp] of [["T1", "2017"], ["T2", "Sul"], ["T3", "40 a 59"]]) {
     await est.click(`[data-iniciar="${id}"]`);
     await vr.waitForFunction((i) => /TAREFA/.test(window.__sim.legenda()) && window.__sim.legenda().indexOf(i === "T1" ? "1" : i === "T2" ? "2" : "3") >= 0, id, { timeout: 5000 }).catch(() => {});
     if (id === "T1") {
       // Uma dica passageira (como a do painel) nao pode apagar a pergunta.
-      await vr.evaluate(() => setCaption("Olhe para um ano no gráfico e belisque para abrir aquele ano.", 300));
-      await vr.waitForTimeout(700);
+      await vr.evaluate(() => setCaption("Ande de lado sobre a linha do tempo no piso: cada passo é um ano.", 300));
+      // espera a CONDICAO (sob carga o timer da dica atrasa): a pergunta volta
+      await vr.waitForFunction(() => /TAREFA 1/.test(window.__sim.legenda()), null, { timeout: 5000 }).catch(() => {});
     }
     legendaT.push(await vr.evaluate(() => window.__sim.legenda()));
     await est.waitForTimeout(600);
@@ -266,8 +343,17 @@ const SSQ_POS = { 1: 1, 2: 1, 3: 0, 4: 2, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 1, 1
   await d2.goto(`${BASE}/controle-2d.html?estudo=1&p=${P}`);
   await d2.waitForFunction(() => window.CONTROLE2D && window.CONTROLE2D.state.pronto);
   await est.waitForFunction(() => /conectada/.test(document.getElementById("vivo").textContent), null, { timeout: 8000 }).catch(() => {});
+  await d2.mouse.move(640, 300);
+  // rola com a roda do mouse ate o fim da historia
+  const caminho2d = [];
+  for (let k = 0; k < 60; k += 1) {
+    await d2.mouse.wheel(0, 120);
+    await d2.waitForTimeout(40);
+    const a = await d2.evaluate(() => window.CONTROLE2D.state.anoIdx);
+    if (caminho2d[caminho2d.length - 1] !== a) caminho2d.push(a);
+  }
   await d2.hover('.regiao[data-regiao="sul"]');
-  await d2.waitForTimeout(300);
+  await d2.waitForTimeout(600);
   await d2.click('.regiao[data-regiao="sul"]');
   await d2.waitForTimeout(1200);
   await est.click('[data-iniciar="T1"]');
@@ -277,7 +363,11 @@ const SSQ_POS = { 1: 1, 2: 1, 3: 0, 4: 2, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 1, 1
   await est.click('#op-T1 button:text-is("2018")');
   await d2.evaluate(() => window.Telemetry.enviarAgora());
   await d2.waitForTimeout(2500);
-  registra("E4", /TAREFA 1: Em que ano/.test(legenda2d), `condicao 2D recebe a pergunta pela estacao: "${legenda2d.slice(0, 50)}..."`);
+  registra(
+    "E4",
+    /TAREFA 1: Em que ano/.test(legenda2d) && caminho2d.join(",") === "0,1,2,3,4,5,6,7",
+    `2D: rolando, ${caminho2d.map((i) => 2017 + i).join(" > ")}; recebe a pergunta pela estacao: "${legenda2d.slice(0, 40)}..."`
+  );
 
   // ---- o que ficou gravado ---------------------------------------------------
   const arquivo = path.join(PASTA, `${P}.jsonl`);
@@ -296,7 +386,13 @@ const SSQ_POS = { 1: 1, 2: 1, 3: 0, 4: 2, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 1, 1
   registra(
     "E6",
     pos && ["x", "z", "guinada", "inclinacao", "fps", "alvo"].every((k) => k in pos) && versao && versao.artefato && versao.ua,
-    `pos traz posicao + guinada/inclinacao + fps + alvo do olhar; versao = ${versao ? versao.artefato : "?"} (${versao && versao.ua ? "userAgent ok" : "sem userAgent"})`
+    `pos traz posicao + guinada/inclinacao + fps + alvo do olhar + ano; versao = ${versao ? versao.artefato : "?"} (${versao && versao.ua ? "userAgent ok" : "sem userAgent"})`
+  );
+  const anosPos = daSessaoVR.filter((l) => l.tipo === "ano" && l.via === "posicao");
+  registra(
+    "E15",
+    anosPos.length >= 7 && anosPos.every((l) => typeof l.x === "number" && typeof l.z === "number" && l.de !== undefined) && pos && "ano" in pos && versao && versao.artefato === "piloto-v1",
+    `${anosPos.length} trocas de ano pelo corpo gravadas (via "posicao", com x/z da cabeca e o ano de onde veio); artefato ${versao ? versao.artefato : "?"}`
   );
 
   const res = analisar(linhas);
@@ -316,11 +412,21 @@ const SSQ_POS = { 1: 1, 2: 1, 3: 0, 4: 2, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 1, 1
   );
   registra(
     "E9",
-    painel && rv.metros_a_pe >= 0.8 && rv.teleportes >= 1 && rv.metros_teleporte > 0.5 && rv.tempo_zona_mesa_s > 0 && rv.olhar_regiao_s > 0 && rv.fps_mediana > 0,
+    painel && rv.metros_a_pe >= 0.8 && rv.teleportes >= 1 && rv.metros_teleporte > 0.5 && rv.tempo_zona_faixa_s > 0 && rv.olhar_regiao_s > 0 && rv.fps_mediana > 0,
     `movimento: ${rv.metros_a_pe} m a pe, ${rv.teleportes} teleporte(s) (${rv.metros_teleporte} m), proporcao a pe ${rv.proporcao_a_pe}; ` +
-      `zona mesa ${rv.tempo_zona_mesa_s} s / contexto ${rv.tempo_zona_contexto_s} s; olhar em regiao ${rv.olhar_regiao_s} s; fps mediana ${rv.fps_mediana}`
+      `zona faixa ${rv.tempo_zona_faixa_s} s / contexto ${rv.tempo_zona_contexto_s} s; olhar em regiao ${rv.olhar_regiao_s} s; fps mediana ${rv.fps_mediana}`
   );
-  registra("E10", r2.tempo_secao_mesa_s > 0 && r2.paineis_abertos >= 1, `2D: ${r2.tempo_secao_mesa_s} s na mesa, ${r2.tempo_secao_painel_s} s no painel, ${r2.paineis_abertos} painel(is) aberto(s)`);
+  registra(
+    "E10",
+    r2.tempo_mouse_mesa_s > 0 && r2.paineis_abertos >= 1 && r2.percorreu_todos && r2.trocas_ano >= 7,
+    `2D: mouse ${r2.tempo_mouse_mesa_s} s na mesa / ${r2.tempo_mouse_painel_s} s no painel; ${r2.paineis_abertos} painel(is) aberto(s); ${r2.anos_visitados} anos visitados, ${r2.trocas_ano} trocas pela rolagem`
+  );
+  registra(
+    "E16",
+    rv.percorreu_todos && rv.anos_visitados === 8 && rv.trocas_ano >= 7 && rv.tempo_zona_faixa_s > 0 && rv.chegou_ao_fim_antes_T1 === true && rv.T1_ano != null && r2.T1_ano === 2024,
+    `linha do tempo na analise: imersiva ${rv.anos_visitados} anos, ${rv.trocas_ano} trocas (${rv.voltas_no_tempo} para tras), ${rv.tempo_zona_faixa_s} s sobre a faixa, ` +
+      `chegou a 2024 antes da T1: ${rv.chegou_ao_fim_antes_T1}; respondeu a T1 em ${rv.T1_ano}; 2D respondeu a T1 em ${r2.T1_ano}`
+  );
 
   const relevantes = erros.filter((m) => !/WebGL|GPU|swiftshader|favicon|ERR_FAILED|ERR_BLOCKED|ERR_ABORTED|Failed to load resource|api\/estudo\/eventos/i.test(m));
   registra("E11", relevantes.length === 0, relevantes.length ? `${relevantes.length} erro(s): ${relevantes.slice(0, 4).join(" | ")}` : "console limpo nas tres paginas");

@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050711'/%3E%3Crect x='14' y='22' width='36' height='26' rx='3' fill='%231d9e75'/%3E%3Crect x='18' y='10' width='28' height='8' rx='2' fill='%238b7fe8'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=22" />
+    <link rel="stylesheet" href="styles.css?v=23" />
     <!-- A-Frame: tenta a copia LOCAL (offline) e cai no CDN se ela nao existir. -->
     <script src="assets/aframe-1.5.0.min.js"></script>
     <script>
@@ -56,14 +56,14 @@
     <div class="onboard-overlay" id="onboardOverlay" hidden>
       <div class="onboard-card" role="dialog" aria-label="Como usar">
         <span class="onboard-kicker">Ambiente VR narrativo</span>
-        <h2>Três ações</h2>
-        <p class="onboard-sub">Uma sala, três camadas: o dado bruto na mesa, a visualização no ar, o texto na parede ao lado.</p>
+        <h2>Ande no tempo</h2>
+        <p class="onboard-sub">Uma sala, três camadas: o dado bruto na mesa, a visualização no ar, o texto na parede ao lado. E uma linha do tempo no piso.</p>
         <ol class="onboard-steps">
-          <li><strong>Entre no ambiente.</strong> Você nasce na porta; caminhe (ou mire o disco no piso e confirme) até a marca em frente ao mapa.</li>
-          <li><strong>Olhe para uma região do mapa.</strong> O olhar é que põe a região em foco — nada é selecionado sozinho.</li>
-          <li><strong>Confirme.</strong> No Quest 2, <strong>belisque</strong> (polegar + indicador, com a palma virada para fora) ou aperte o <strong>gatilho</strong>. No desktop, <strong>clique</strong>. A visualização da região sobe acima do mapa.</li>
+          <li><strong>Ande de lado sobre a linha do tempo.</strong> Você começa em 2017; cada passo para a direita é um ano. A história avança com o seu corpo — e volta, se você voltar.</li>
+          <li><strong>Olhe para uma região do mapa.</strong> O olhar põe a região em foco — nada é selecionado sozinho.</li>
+          <li><strong>Confirme.</strong> No Quest 2, <strong>belisque</strong> (polegar + indicador, com a palma virada para fora) ou aperte o <strong>gatilho</strong>. No desktop, <strong>clique</strong> (e ande com as teclas A/D). A visualização da região sobe no painel.</li>
         </ol>
-        <p class="onboard-sub">Dentro do painel, olhe para um ano e confirme para trocar o ano. As quatro colunas na beira da mesa trocam o indicador.</p>
+        <p class="onboard-sub">Sem região escolhida, o painel mostra o Brasil. As quatro colunas na beira da mesa trocam o indicador.</p>
         <button id="onboardStart" type="button">Entrar</button>
         <p class="onboard-foot">Você pode rever isto no botão “?” no canto.</p>
       </div>
@@ -194,8 +194,9 @@
       <a-entity id="sala"></a-entity>
       <a-entity id="zonas"></a-entity>
 
-      <!-- Discos do piso: "voce esta aqui" e destinos de teleporte. -->
-      <!-- O alvo do olhar e um disco CHEIO e invisivel por cima do anel: o anel
+      <!-- Discos do piso (destinos de teleporte). O verde, ao lado de 2017, e a
+           volta para a linha do tempo: ele RESTAURA a ancora da faixa (70-faixa.js).
+           O alvo do olhar e um disco CHEIO e invisivel por cima do anel: o anel
            tem um furo no meio, e e exatamente no meio que a pessoa mira. -->
       <a-entity id="discoUsuario">
         <a-ring
@@ -205,16 +206,7 @@
           material="color: #1d9e75; shader: flat; opacity: 0.85; transparent: true"
         ></a-ring>
         <a-circle radius="0.09" rotation="-90 0 0" material="color: #1d9e75; shader: flat"></a-circle>
-        <a-circle class="clickable alvo-teleporte" radius="0.34" rotation="-90 0 0" position="0 0.004 0" data-destino="usuario" material="visible: false"></a-circle>
-      </a-entity>
-      <a-entity id="discoEntrada">
-        <a-ring
-          radius-inner="0.18"
-          radius-outer="0.24"
-          rotation="-90 0 0"
-          material="color: #4cc9f0; shader: flat; opacity: 0.5; transparent: true"
-        ></a-ring>
-        <a-circle class="clickable alvo-teleporte" radius="0.3" rotation="-90 0 0" position="0 0.004 0" data-destino="entrada" material="visible: false"></a-circle>
+        <a-circle class="clickable alvo-teleporte" radius="0.34" rotation="-90 0 0" position="0 0.004 0" data-destino="faixa" material="visible: false"></a-circle>
       </a-entity>
       <a-entity id="discoContexto">
         <a-ring
@@ -310,6 +302,10 @@
         <a-text id="painelKicker" data-linha-unica="1" value="" position="-1.38 0.6 0.006" width="0.6" wrap-count="22" align="left" anchor="left" color="#8b7fe8" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
         <a-text id="painelTitulo" data-linha-unica="1" value="" position="-1.38 0.46 0.006" width="1.05" wrap-count="19" align="left" anchor="left" color="#f4f8ff" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
         <a-text id="painelManchete" value="" position="-1.38 0.33 0.006" width="2.3" wrap-count="62" align="left" anchor="left" color="#c6d4ea" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <!-- O ANO da linha do tempo, grande, a altura dos olhos: a pessoa nao
+             precisa olhar para o chao para saber em que ano esta. -->
+        <a-text id="painelAno" data-linha-unica="1" value="" position="1.24 0.5 0.006" width="0.4" wrap-count="4" align="right" anchor="right" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
+        <a-text id="painelEvento" data-linha-unica="1" value="" position="1.24 0.385 0.006" width="0.6" wrap-count="22" align="right" anchor="right" color="#ffd166" font="assets/poppins-msdf.json" shader="msdf" negate="false"></a-text>
         <a-plane id="painelAcento" width="2.76" height="0.005" position="0 0.25 0.006" material="color: #4cc9f0; shader: flat; opacity: 0.5; transparent: true"></a-plane>
 
         <!-- Fechar: um alvo pequeno e afastado, para nao competir com os anos. -->
@@ -335,22 +331,23 @@
       </a-entity>
     </a-scene>
 
-    <!-- Ordem importa: planta -> telemetria -> base -> dados/audio -> headset -> tarefas -> construtores -> boot -> treino -> estudo. -->
-    <script src="js-ambiente/00-planta.js?v=22"></script>
-    <script src="js-ambiente/01-telemetria.js?v=22"></script>
-    <script src="js-ambiente/02-base.js?v=22"></script>
-    <script src="js-ambiente/03-audio.js?v=22"></script>
-    <script src="js-ambiente/04-narrativa.js?v=22"></script>
-    <script src="js-ambiente/05-headset.js?v=22"></script>
-    <script src="js-ambiente/07-tarefas.js?v=22"></script>
-    <script src="js-ambiente/10-voxel.js?v=22"></script>
-    <script src="js-ambiente/15-sala.js?v=22"></script>
-    <script src="js-ambiente/20-mapa.js?v=22"></script>
-    <script src="js-ambiente/30-contexto.js?v=22"></script>
-    <script src="js-ambiente/40-painel.js?v=22"></script>
-    <script src="js-ambiente/50-interacao.js?v=22"></script>
-    <script src="js-ambiente/60-boot.js?v=22"></script>
-    <script src="js-ambiente/85-treino.js?v=22"></script>
-    <script src="js-ambiente/90-estudo.js?v=22"></script>
+    <!-- Ordem importa: planta -> telemetria -> base -> dados/audio -> headset -> tarefas -> construtores -> boot -> linha do tempo -> treino -> estudo. -->
+    <script src="js-ambiente/00-planta.js?v=23"></script>
+    <script src="js-ambiente/01-telemetria.js?v=23"></script>
+    <script src="js-ambiente/02-base.js?v=23"></script>
+    <script src="js-ambiente/03-audio.js?v=23"></script>
+    <script src="js-ambiente/04-narrativa.js?v=23"></script>
+    <script src="js-ambiente/05-headset.js?v=23"></script>
+    <script src="js-ambiente/07-tarefas.js?v=23"></script>
+    <script src="js-ambiente/10-voxel.js?v=23"></script>
+    <script src="js-ambiente/15-sala.js?v=23"></script>
+    <script src="js-ambiente/20-mapa.js?v=23"></script>
+    <script src="js-ambiente/30-contexto.js?v=23"></script>
+    <script src="js-ambiente/40-painel.js?v=23"></script>
+    <script src="js-ambiente/50-interacao.js?v=23"></script>
+    <script src="js-ambiente/60-boot.js?v=23"></script>
+    <script src="js-ambiente/70-faixa.js?v=23"></script>
+    <script src="js-ambiente/85-treino.js?v=23"></script>
+    <script src="js-ambiente/90-estudo.js?v=23"></script>
   </body>
 </html>

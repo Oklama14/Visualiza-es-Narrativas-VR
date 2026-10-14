@@ -164,11 +164,6 @@ function confirmar(alvo) {
     trocarIndicador(e.dataset.indicador);
     return;
   }
-  if (e.dataset.ano != null) {
-    // Alvos de ano so existem com o painel aberto (ver alvosDoPainel).
-    if (state.painelAberto) selecionarAno(Number(e.dataset.ano), true);
-    return;
-  }
   if (e.dataset.destino) {
     irPara(e.dataset.destino);
     return;
@@ -185,11 +180,13 @@ function confirmar(alvo) {
 function trocarIndicador(key) {
   if (state.indicadorKey === key) return;
   state.indicadorKey = key;
-  state.anoIdx = null;
+  // O ano NAO volta: ele e de quem anda (a pessoa continua onde esta na linha
+  // do tempo). Troca-se a pergunta, nao o momento da historia.
   tlog("indicador", { key });
   updateMapa();
-  if (state.painelAberto) renderPainel();
+  renderPainel();
   updateContexto();
+  if (typeof pintarFaixa === "function") pintarFaixa();
   const c = colunaEls[key];
   if (c) playSparkle(c.grupo);
 }
@@ -202,9 +199,10 @@ function abrirPainel(id) {
   const r = regioesEls[id];
   if (!r) return;
 
+  const vinhaDoBrasil = !state.painelAberto;
   const jaAberto = state.painelAberto && state.regiaoId === id;
   state.regiaoId = id;
-  state.anoIdx = null;
+  state.painelAberto = true;
   setFoco(id);
   renderPainel();
   updateContexto();
@@ -213,26 +211,15 @@ function abrirPainel(id) {
   const p = new AFRAME.THREE.Vector3();
   r.grupo.object3D.getWorldPosition(p);
 
-  // O painel encara quem o chamou: fica ancorado no lugar, mas legivel.
-  // Guinada E inclinacao: o painel fica acima dos olhos, entao o topo inclina
-  // PARA quem olha (X positivo). A versao anterior usava -8 fixo, que deitava o
-  // topo para tras e deixava a face 15 graus fora da linha do olhar.
-  const cam = document.getElementById("camera");
-  const cp = new AFRAME.THREE.Vector3(PLANTA.usuario.x, 1.6, PLANTA.usuario.z);
-  if (cam && cam.object3D) cam.object3D.getWorldPosition(cp);
-  const destino = { x: PLANTA.painel.cx, z: PLANTA.painel.cz };
-  const guinada = encarar(destino, { x: cp.x, z: cp.z });
-  dom.painel.setAttribute("rotation", `${inclinacaoPainel(destino, cp)} ${guinada} 0`);
-
   // Fio que liga a regiao ao painel (o tracejado do desenho).
   dom.fio.setAttribute("position", `${round2(p.x)} ${round2((0.86 + PLANTA.painel.baseY) / 2)} ${round2(p.z)}`);
   dom.fio.setAttribute("height", round2(PLANTA.painel.baseY - 0.86));
-
-  setEntityVisible(dom.painel, true);
   setEntityVisible(dom.fio, true);
   alvosDoPainel(true);
 
-  if (!jaAberto) {
+  // O painel ja esta no lugar (mostrando o Brasil). Ao abrir uma regiao vinda
+  // do Brasil, ele "nasce" de novo sobre ela e sobe - a regiao ganha o painel.
+  if (!jaAberto && vinhaDoBrasil) {
     dom.painel.setAttribute("position", `${round2(p.x)} ${PLANTA.painel.subidaDe} ${round2(p.z)}`);
     dom.painel.setAttribute("scale", "0.5 0.5 0.5");
     dom.painel.setAttribute("animation__sobe", {
@@ -250,12 +237,21 @@ function abrirPainel(id) {
       easing: "easeOutCubic",
     });
     playEmergeChime(dom.painel);
-    setCaption("Olhe para um ano no gráfico e belisque para abrir aquele ano.", 6000);
+    setCaption("Ande de lado sobre a linha do tempo no piso: cada passo é um ano.", 6000);
   }
 
-  state.painelAberto = true;
   tlog("painel", { evento: "abrir", regiao: id });
   refreshRaycasters();
+}
+
+// O painel fica fixo sobre a mesa, de frente para o CENTRO da linha do tempo
+// (guinada e inclinacao calculadas uma vez): de qualquer ponto da faixa, a
+// face fica no maximo ~23 graus de lado. Ele nao segue a pessoa.
+function orientarPainel() {
+  const destino = { x: PLANTA.painel.cx, z: PLANTA.painel.cz };
+  const olho = { x: PLANTA.usuario.x, y: 1.6, z: PLANTA.usuario.z };
+  const guinada = encarar(destino, { x: olho.x, z: olho.z });
+  dom.painel.setAttribute("rotation", `${inclinacaoPainel(destino, olho)} ${guinada} 0`);
 }
 
 // Inclinacao (graus, eixo X) para a face do painel apontar para o olho.
@@ -265,27 +261,29 @@ function inclinacaoPainel(destino, olho) {
   return round2(Math.max(-20, Math.min(20, graus)));
 }
 
-// Os alvos do painel (anos, fechar) e o bloqueio do olhar so existem com o
-// painel ABERTO. O raycaster mira por classe, nao por visibilidade: sem isto,
-// com o painel fechado, olhar para o ar acima da mesa ainda pegava os anos
-// invisiveis - e uma pinca ali tocava nota e gravava "ano" na telemetria.
-function alvosDoPainel(ligado) {
-  setClickable(dom.painelFechar, ligado);
-  document.querySelectorAll(".alvo-ano").forEach((a) => setClickable(a, ligado));
-  if (dom.painelFundo) dom.painelFundo.classList.toggle("bloqueia-olhar", !!ligado);
+// O painel esta SEMPRE a vista (Brasil ou a regiao aberta), entao ele sempre
+// barra o olhar - nao da para focar uma regiao "atraves" dele. O botao de
+// fechar so responde com uma regiao aberta (fechar = voltar ao Brasil).
+// O raycaster mira por classe, nao por visibilidade: dai o setClickable.
+function alvosDoPainel(regiaoAberta) {
+  setClickable(dom.painelFechar, regiaoAberta);
+  setEntityVisible(dom.painelFechar, regiaoAberta);
+  if (dom.painelFundo) dom.painelFundo.classList.add("bloqueia-olhar");
   refreshRaycasters();
 }
 
+// "Fechar" agora devolve o painel ao Brasil (ele nunca some).
 function fecharPainel() {
   if (!state.painelAberto) return;
   state.painelAberto = false;
   state.regiaoId = null;
-  state.anoIdx = null;
-  alvosDoPainel(false);
   dom.painel.removeAttribute("animation__sobe");
   dom.painel.removeAttribute("animation__cresce");
-  setEntityVisible(dom.painel, false);
+  dom.painel.setAttribute("position", `${PLANTA.painel.cx} ${PLANTA.painel.cy} ${PLANTA.painel.cz}`);
+  dom.painel.setAttribute("scale", "1 1 1");
   setEntityVisible(dom.fio, false);
+  alvosDoPainel(false);
+  renderPainel();
   pintarFoco();
   updateMapa();
   updateContexto();
@@ -329,6 +327,12 @@ const DESTINOS = {
 // quase 1 m do disco, e girar o rig para "olhar o mapa" ignorava para onde ela
 // estava virada. Aqui a conta desfaz o deslocamento e a guinada da cabeca.
 async function irPara(nome) {
+  // Volta a linha do tempo: restaura a ancora (70-faixa.js), para a faixa
+  // continuar no MESMO lugar da sala real.
+  if (nome === "faixa") {
+    await voltarParaFaixa();
+    return;
+  }
   const d = DESTINOS[nome];
   if (!d) return;
   const rig = document.getElementById("cameraRig");
@@ -436,7 +440,7 @@ function bindEntradas() {
     // O raio do mouse sai de um ponto fixo da cena em VR e so produziria
     // hovers fantasmas; dentro do headset quem mira e so o olhar.
     scene.setAttribute("raycaster", "enabled", false);
-    setCaption("Olhe para uma região do mapa e belisque (ou aperte o gatilho).", 7000);
+    setCaption("Ande de lado sobre a linha do tempo: cada passo é um ano.", 7000);
     refreshRaycasters();
   });
 

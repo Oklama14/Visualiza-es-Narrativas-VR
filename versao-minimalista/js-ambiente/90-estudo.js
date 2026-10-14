@@ -8,7 +8,9 @@
 //                                        legenda fixa dentro do headset
 //   treino-iniciar / treino-encerrar ... a etapa de treino (85-treino.js)
 //   mensagem ........................... um aviso curto na legenda
-//   ir-entrada ......................... leva a pessoa de volta a porta
+//   ancorar-faixa ...................... ancora a linha do tempo: 2017 sob a
+//                                        cabeca (70-faixa.js); "ir-entrada",
+//                                        da v0, faz o mesmo
 // A resposta falada e registrada pelo pesquisador NA ESTACAO (com o tempo
 // medido la). As tarefas e o gabarito vem de 07-tarefas.js - a mesma
 // definicao da condicao 2D.
@@ -67,18 +69,24 @@
     return i < 0 ? null : { t: p.lista[i], n: i + 1 };
   }
 
+  // Em que ano da linha do tempo a pessoa estava (a resposta de T1 depende
+  // de ela ter percorrido os anos; T2 e T3 perguntam por 2024).
+  function anoAtual() {
+    return state.anoIdx == null ? null : DADOS.anos[state.anoIdx];
+  }
+
   function exibirTarefa(id, origem) {
     const a = acharTarefa(id);
     if (!a) return;
     if (state.treino) encerrarTreino("tarefa");
     setLegendaFixa(`TAREFA ${a.n}: ${a.t.pergunta}`);
-    tlog("tarefa", { id, evento: "exibida", origem });
+    tlog("tarefa", { id, evento: "exibida", via: origem, ano: anoAtual() });
   }
 
   function encerrarTarefa(id, origem) {
     setLegendaFixa("");
     setCaption("Resposta registrada. Obrigado!", 2500);
-    tlog("tarefa", { id: id || null, evento: "encerrada", origem });
+    tlog("tarefa", { id: id || null, evento: "encerrada", via: origem, ano: anoAtual() });
   }
 
   // ---- Comandos da estacao do pesquisador ----
@@ -101,8 +109,11 @@
         case "mensagem":
           setCaption(String(c.texto || "").slice(0, 120), Math.min(20000, Number(c.ms) || 7000));
           break;
+        // "ir-entrada" era o botao "Levar a porta" da v0; continua aceito.
+        case "ancorar-faixa":
         case "ir-entrada":
-          irPara("entrada");
+          if (state.treino) encerrarTreino("ancora");
+          ancorarFaixa("estacao");
           break;
         default:
           break;
@@ -136,7 +147,7 @@
     tarefaAtual = i;
     emAndamento = true;
     tarefaT0 = performance.now();
-    tlog("tarefa", { id: t.id, evento: "inicio", origem: "painel-local" });
+    tlog("tarefa", { id: t.id, evento: "inicio", via: "painel-local", ano: anoAtual() });
     exibirTarefa(t.id, "painel-local");
     renderEstado();
   }
@@ -145,7 +156,7 @@
     const t = tarefas().lista[tarefaAtual];
     const tempoMs = Math.round(performance.now() - tarefaT0);
     const r = corrigirResposta(t, opcao);
-    tlog("tarefa", { id: t.id, evento: "resposta", resposta: opcao, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs, origem: "painel-local" });
+    tlog("tarefa", { id: t.id, evento: "resposta", resposta: opcao, correta: r.correta, corretaEstrita: r.corretaEstrita, tempoMs, via: "painel-local", ano: anoAtual() });
     emAndamento = false;
     encerrarTarefa(t.id, "painel-local");
     renderEstado();

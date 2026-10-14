@@ -137,7 +137,8 @@ function atender(req, res) {
 const ID_OK = /^[A-Za-z0-9_-]{1,32}$/;
 const LIMITE_CORPO = 2 * 1024 * 1024;
 const CONDICOES = ["webxr", "2d"];
-const COMANDOS = ["tarefa-iniciar", "tarefa-encerrar", "treino-iniciar", "treino-encerrar", "mensagem", "ir-entrada"];
+// "ir-entrada" (v0) continua aceito: no headset da v1 ele ancora a linha do tempo.
+const COMANDOS = ["tarefa-iniciar", "tarefa-encerrar", "treino-iniciar", "treino-encerrar", "mensagem", "ancorar-faixa", "ir-entrada"];
 
 // Estado em memoria (o arquivo .jsonl e a fonte da verdade; isto so alimenta
 // a tela da estacao do pesquisador).
@@ -193,7 +194,7 @@ function gravar(participante, linhas) {
 
 function resumoDe(p) {
   if (!estudo.resumo.has(p)) {
-    estudo.resumo.set(p, { eventos: 0, ultimo: null, recentes: [], pos: null, fps: null, perdasRastreio: 0, pincasNoVazio: 0, treino: null, conexao: null });
+    estudo.resumo.set(p, { eventos: 0, ultimo: null, recentes: [], pos: null, fps: null, perdasRastreio: 0, pincasNoVazio: 0, treino: null, conexao: null, ano: null, anosVisitados: [], ancorada: null });
   }
   return estudo.resumo.get(p);
 }
@@ -205,14 +206,24 @@ function lembrar(p, linhas) {
     r.eventos += 1;
     r.ultimo = ev.recebido;
     if (ev.tipo === "pos") {
-      r.pos = { x: ev.x, z: ev.z, guinada: ev.guinada, vr: ev.vr, alvo: ev.alvo };
+      r.pos = { x: ev.x, z: ev.z, guinada: ev.guinada, vr: ev.vr, alvo: ev.alvo, ano: ev.ano };
       if (ev.fps != null) r.fps = ev.fps;
+      if (ev.ano != null) r.ano = ev.ano;
       return;
     }
     if (ev.tipo === "rolagem") {
-      r.pos = { secao: ev.secao, y: ev.y };
+      r.pos = { secao: ev.secao, y: ev.y, ano: ev.ano };
+      if (ev.ano != null) r.ano = ev.ano;
       return;
     }
+    // Linha do tempo: o ano em que a pessoa esta e os anos por onde ja passou
+    // (a estacao mostra se ela chegou ao fim da historia).
+    if (ev.tipo === "ano" && ev.ano != null) {
+      r.ano = ev.ano;
+      if (r.anosVisitados.indexOf(ev.ano) < 0) r.anosVisitados.push(ev.ano);
+      r.anosVisitados.sort();
+    }
+    if (ev.tipo === "faixa" && ev.evento === "ancorada") r.ancorada = { recebido: ev.recebido, via: ev.via || null };
     if (ev.tipo === "rastreio" && ev.estado === "perdido") r.perdasRastreio += 1;
     if ((ev.tipo === "pinca" || ev.tipo === "gatilho") && !ev.alvo) r.pincasNoVazio += 1;
     if (ev.tipo === "treino") r.treino = { evento: ev.evento, etapa: ev.etapa || null, concluido: ev.concluido };
@@ -254,6 +265,8 @@ async function api(req, res) {
     // se passar por outro participante.
     const linhas = eventos
       .filter((e) => e && typeof e === "object" && typeof e.tipo === "string")
+      // "origem" e de quem gravou (participante/pesquisador) e quem decide e o
+      // servidor; o "de onde veio" de cada evento vai no campo "via".
       .map((e) => Object.assign({}, e, { participante, sessao, condicao, origem, recebido, reenvio: c.reenvio ? true : undefined }));
     gravar(participante, linhas);
     lembrar(participante, linhas);

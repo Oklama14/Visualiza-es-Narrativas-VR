@@ -8,11 +8,14 @@
 //
 //   1. pinca ...... olhar um alvo e beliscar (ou apertar o gatilho)
 //   2. teleporte .. mirar um disco no piso e beliscar
-//   3. passo ...... andar de verdade ate uma marca no piso
+//   3. passo ...... dar um passo DE LADO e ver o ano mudar (a linha do tempo
+//                   em miniatura: 2017 | 2018) - a pessoa descobre sozinha que
+//                   o corpo muda o tempo, sem explicacao
 //
-// Durante o treino a mesa, a zona de contexto, o painel e os discos somem e
-// deixam de responder ao olhar (nenhum dado aparece). No fim tudo volta e a
-// pessoa e levada para a porta - o ponto de partida padronizado da exploracao.
+// Durante o treino a mesa, a zona de contexto, o painel, a linha do tempo e os
+// discos somem e deixam de responder ao olhar (nenhum dado aparece). No fim
+// tudo volta e a pessoa e devolvida a linha do tempo, no mesmo lugar da sala
+// real (ancora restaurada; 70-faixa.js).
 //
 // Disparo: estacao do pesquisador (comando "treino-iniciar"), botao do painel
 // local, ou ?treino=1 na URL (para testar). Cada etapa vai para a telemetria
@@ -36,14 +39,17 @@ const TREINO_PONTOS = {
   inicio: { x: 0, z: 0.9, olhar: { x: 0, z: -2 } },
   alvo: { x: 0, y: 1.35, z: -0.5 },
   disco: { x: 1.3, z: -0.3, olhar: { x: 1.3, z: -2 } },
-  marca: { x: 1.3, z: -0.9 },
+  // Mini linha do tempo: dois trechos de 30 cm, o 1o sob quem chega pelo
+  // disco, o 2o logo a DIREITA. "marca" e o centro do trecho de 2018.
+  marca: { x: 1.6, z: -0.3 },
 };
-const TREINO_RAIO_MARCA = 0.25; // m: cabeca dentro disto = chegou
+const TREINO_TRECHO = 0.3;
+const TREINO_HISTERESE = 0.05; // mesma folga da linha do tempo de verdade
 
 const TREINO_ETAPAS = [
   { id: "pinca", legenda: "TREINO 1 de 3 · Olhe para o círculo azul e belisque (polegar + indicador, palma para fora) ou aperte o gatilho." },
   { id: "teleporte", legenda: "TREINO 2 de 3 · Mire o disco verde no piso e belisque para ir até ele." },
-  { id: "passo", legenda: "TREINO 3 de 3 · Agora dê um passo de verdade para a frente, até a marca amarela no piso." },
+  { id: "passo", legenda: "TREINO 3 de 3 · Dê um passo de verdade para o lado DIREITO, até o 2018 no piso. Veja o ano mudar." },
 ];
 
 function iniciarTreino(origem) {
@@ -52,10 +58,10 @@ function iniciarTreino(origem) {
   TREINO.ativo = true;
   state.treino = true;
   TREINO.t0 = performance.now();
-  tlog("treino", { evento: "inicio", origem: origem || null });
+  tlog("treino", { evento: "inicio", via: origem || null });
 
   // Esconde as camadas de dados e tira TODOS os alvos atuais do olhar.
-  TREINO.ocultos = [dom.mesaMapa, dom.contextoZona, dom.painel, dom.fio, dom.zonas, dom.discoUsuario, dom.discoEntrada, dom.discoContexto].filter(Boolean);
+  TREINO.ocultos = [dom.mesaMapa, dom.contextoZona, dom.painel, dom.fio, dom.zonas, dom.faixaTempo, dom.discoUsuario, dom.discoContexto].filter(Boolean);
   TREINO.ocultos.forEach((e) => setEntityVisible(e, false));
   TREINO.desligados = Array.from(document.querySelectorAll(".clickable"));
   TREINO.desligados.forEach((e) => setClickable(e, false));
@@ -93,13 +99,21 @@ function montarTreino() {
   disco.appendChild(discoHit);
   g.appendChild(disco);
 
-  // 3. Marca amarela no piso, um passo a frente de quem chegou pelo disco.
-  const marca = el("a-entity", { position: `${P.marca.x} 0.01 ${P.marca.z}`, visible: false });
-  marca.appendChild(el("a-ring", { "radius-inner": 0.16, "radius-outer": 0.24, rotation: "-90 0 0", material: "color: #ffd166; shader: flat; opacity: 0.95; transparent: true" }));
-  marca.appendChild(el("a-circle", { radius: 0.05, rotation: "-90 0 0", material: "color: #ffd166; shader: flat" }));
+  // 3. Mini linha do tempo: 2017 sob quem chegou pelo disco, 2018 a direita,
+  // e o ano grande a frente, na altura dos olhos.
+  const marca = el("a-entity", { visible: false });
+  const t17 = el("a-plane", { rotation: "-90 0 0", width: TREINO_TRECHO - 0.02, height: 0.3, position: `${P.disco.x} 0.012 ${P.disco.z}`, material: "color: #ffd166; shader: flat" });
+  const t18 = el("a-plane", { rotation: "-90 0 0", width: TREINO_TRECHO - 0.02, height: 0.3, position: `${P.marca.x} 0.012 ${P.marca.z}`, material: "color: #1b2a44; shader: flat" });
+  marca.appendChild(t17);
+  marca.appendChild(t18);
+  [[P.disco.x, "2017"], [P.marca.x, "2018"]].forEach(([x, ano]) => {
+    marca.appendChild(el("a-text", Object.assign({ value: ano, rotation: "-90 0 0", position: `${x} 0.016 ${P.disco.z + 0.05}`, align: "center", color: "#cfe0f4", font: FONTE }, escalaTexto(4, 0.05))));
+  });
+  const anoGrande = el("a-text", Object.assign({ value: "2017", position: `${round2((P.disco.x + P.marca.x) / 2)} 1.45 ${round2(P.disco.z - 1.3)}`, align: "center", color: "#ffffff", font: FONTE }, escalaTexto(4, 0.12)));
+  marca.appendChild(anoGrande);
   g.appendChild(marca);
 
-  TREINO.partes = { alvo, circulo, disco, discoHit, marca };
+  TREINO.partes = { alvo, circulo, disco, discoHit, marca, t17, t18, anoGrande };
   applyPendingTransforms(g);
   [circulo, discoHit].forEach(registrarAlvo);
   return g;
@@ -114,27 +128,49 @@ function irParaEtapa(i) {
   setEntityVisible(p.disco, i === 1);
   setClickable(p.discoHit, i === 1);
   setEntityVisible(p.marca, i === 2);
+  if (i === 2) {
+    // a mini linha do tempo sempre comeca em 2017 (o treino pode ser repetido)
+    setText(p.anoGrande, "2017");
+    p.t17.setAttribute("material", "color", "#ffd166");
+    p.t18.setAttribute("material", "color", "#1b2a44");
+  }
   setLegendaFixa(TREINO_ETAPAS[i].legenda);
   refreshRaycasters();
 
   clearInterval(TREINO.vigia);
   if (TREINO_ETAPAS[i].id === "passo") {
-    // Chegou quando a CABECA esta sobre a marca (o passo e fisico; no
-    // desktop, as teclas WASD fazem o mesmo papel).
+    // Chegou quando a CABECA entrou no trecho de 2018 (com a mesma folga da
+    // linha do tempo). O passo e fisico; no desktop, a tecla D faz o papel.
+    const p = TREINO.partes;
+    const fronteira = TREINO_PONTOS.disco.x + TREINO_TRECHO / 2;
     TREINO.vigia = setInterval(() => {
       const cam = document.getElementById("camera");
       if (!cam || !cam.object3D) return;
       const c = new AFRAME.THREE.Vector3();
       cam.object3D.getWorldPosition(c);
-      if (Math.hypot(c.x - TREINO_PONTOS.marca.x, c.z - TREINO_PONTOS.marca.z) < TREINO_RAIO_MARCA) concluirEtapa();
+      if (Math.abs(c.z - TREINO_PONTOS.disco.z) > 0.6) return;
+      if (c.x >= fronteira + TREINO_HISTERESE) {
+        setText(p.anoGrande, "2018");
+        p.t17.setAttribute("material", "color", "#2c4a6e");
+        p.t18.setAttribute("material", "color", "#ffd166");
+        clearInterval(TREINO.vigia);
+        // o tempo da etapa e o da chegada; os 0,9 s seguintes sao para ver o
+        // ano mudar antes do aviso de concluido
+        const ms = Math.round(performance.now() - TREINO.tEtapa);
+        const etapa = TREINO.etapa;
+        setTimeout(() => {
+          if (TREINO.ativo && TREINO.etapa === etapa) concluirEtapa(ms);
+        }, 900);
+      }
     }, 100);
   }
 }
 
-function concluirEtapa() {
+function concluirEtapa(msMedido) {
   if (!TREINO.ativo) return;
   const etapa = TREINO_ETAPAS[TREINO.etapa];
-  tlog("treino", { evento: "etapa", etapa: etapa.id, ms: Math.round(performance.now() - TREINO.tEtapa) });
+  const ms = typeof msMedido === "number" ? msMedido : Math.round(performance.now() - TREINO.tEtapa);
+  tlog("treino", { evento: "etapa", etapa: etapa.id, ms });
   if (typeof playSparkle === "function" && TREINO.grupo) playSparkle(TREINO.grupo);
   if (TREINO.etapa + 1 < TREINO_ETAPAS.length) {
     irParaEtapa(TREINO.etapa + 1);
@@ -172,20 +208,33 @@ function encerrarTreino(motivo) {
 
   if (TREINO.grupo && TREINO.grupo.parentNode) TREINO.grupo.parentNode.removeChild(TREINO.grupo);
   TREINO.grupo = null;
-  TREINO.ocultos.forEach((e) => setEntityVisible(e, e !== dom.painel && e !== dom.fio));
+  // O painel volta (ele e sempre visivel agora); o fio so com regiao aberta.
+  TREINO.ocultos.forEach((e) => setEntityVisible(e, e !== dom.fio || state.painelAberto));
   TREINO.desligados.forEach((e) => {
-    // Os anos do painel so voltam com o painel aberto (alvosDoPainel).
-    if (!e.classList.contains("alvo-ano") && e !== dom.painelFechar) setClickable(e, true);
+    // O "fechar" do painel so volta com uma regiao aberta (alvosDoPainel).
+    if (e !== dom.painelFechar) setClickable(e, true);
   });
+  alvosDoPainel(state.painelAberto);
   TREINO.ocultos = [];
   TREINO.desligados = [];
   delete DESTINOS.treino;
 
   setLegendaFixa("");
-  // Volta para a porta (o ponto de partida padronizado) - exceto quando quem
-  // encerrou foi uma tarefa: teleportar a pessoa no meio da pergunta confunde.
-  if (motivo !== "tarefa") irPara("entrada");
-  setCaption(concluido ? "Treino concluído! Aguarde a orientação do pesquisador." : "", concluido ? 7000 : 0);
+  // Devolve a pessoa a linha do tempo. Se ela ja tem ancora (o pesquisador
+  // ancorou com a pessoa sobre a fita de 2017, ou a 1a entrada em VR), a
+  // ancora e RESTAURADA - a faixa volta ao mesmo lugar da sala real, e o
+  // passo lateral do treino a deixa um pouco a direita de 2017, sobre a faixa.
+  // Sem ancora, ancora onde ela esta. Exceto quando quem encerrou foi uma
+  // tarefa (teleportar no meio da pergunta confunde) ou o botao de ancorar
+  // (que ancora logo em seguida, 90-estudo.js).
+  if (motivo !== "tarefa" && motivo !== "ancora") {
+    if (FAIXA.ancora) voltarParaFaixa();
+    else ancorarFaixa("treino");
+  }
+  setCaption(
+    concluido ? "Treino concluído! Volte para o 2017, à esquerda na linha do tempo, e aguarde o pesquisador." : "",
+    concluido ? 9000 : 0
+  );
   refreshRaycasters();
 }
 
@@ -200,5 +249,5 @@ function encerrarTreino(motivo) {
 })();
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { TREINO_PONTOS, TREINO_ETAPAS, TREINO_RAIO_MARCA };
+  module.exports = { TREINO_PONTOS, TREINO_ETAPAS, TREINO_TRECHO, TREINO_HISTERESE };
 }

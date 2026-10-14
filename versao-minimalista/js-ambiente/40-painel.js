@@ -74,21 +74,26 @@ function buildParede() {
 // Conteudo (recalculado a cada troca de regiao / indicador / ano)
 // ---------------------------------------------------------------------------
 
+// Elementos do grafico por ano, para a REVELACAO PROGRESSIVA: a linha se
+// desenha so ate o ano em que a pessoa esta na linha do tempo; os cartoes de
+// pior/melhor ano so aparecem no ultimo ano (o desfecho).
+let serieEls = { segs: [], ref: [], cards: [], eventos: [] };
+
 function renderPainel() {
+  // Sem regiao aberta, o painel mostra o BRASIL (a T1 pergunta pelo Brasil, e
+  // ele precisa ser percorrido no tempo como as regioes).
   const ctx = contextoById(state.regiaoId);
   if (!ctx) return;
 
   const ind = indicadorByKey(state.indicadorKey);
   const serie = ctx.series[state.indicadorKey];
-  const narr = computeNarrative(ctx, state.indicadorKey);
 
-  setText(dom.painelKicker, TEXTO_PAINEL_KICKER);
+  setText(dom.painelKicker, kickerPainel(ctx));
   setText(dom.painelTitulo, rotuloContexto(ctx));
-  setText(dom.painelManchete, narr.manchete);
   dom.painelAcento.setAttribute("material", "color", ind.cor);
   dom.painelTopo.setAttribute("material", "color", ind.cor);
 
-  buildSerie(ctx, serie, ind, narr);
+  buildSerie(ctx, serie, ind);
   updateAno();
 }
 
@@ -98,39 +103,38 @@ function pontosDe(serie) {
     .filter(Boolean);
 }
 
-function buildSerie(ctx, serie, ind, narr) {
+function buildSerie(ctx, serie, ind) {
   dom.chartLinha.innerHTML = "";
   dom.chartMarcadores.innerHTML = "";
   dom.chartAnotacoes.innerHTML = "";
   anoEls = [];
+  serieEls = { segs: [], ref: [], cards: [], eventos: [] };
+
+  // O eixo do tempo inteiro fica a vista (os 8 anos); o que avanca e a linha.
+  DADOS.anos.forEach((ano, i) => {
+    dom.chartMarcadores.appendChild(
+      el("a-text", Object.assign({
+        value: String(ano).slice(2),
+        position: `${chartXFor(i)} ${round2(CH.baseY - 0.07)} 0.008`,
+        align: "center",
+        color: "#7e92b4",
+        font: FONTE,
+      }, escalaTexto(2, 0.04)))
+    );
+  });
 
   const pts = pontosDe(serie);
   if (!pts.length) return;
 
-  addLineSegments(dom.chartLinha, pts, ind.cor, 0.008, 0.016, 0.95);
+  serieEls.segs = addLineSegments(dom.chartLinha, pts, ind.cor, 0.008, 0.016, 0.95);
 
   // Referencia nacional pontilhada (so faz sentido fora do Brasil).
   if (ctx.tipo !== "brasil") {
     const bpts = pontosDe(DADOS.brasil.series[state.indicadorKey]);
-    if (bpts.length) addDashedSegments(dom.chartLinha, bpts, "#8fa6c8", 0.006, 0.008, 0.5);
+    if (bpts.length) serieEls.ref = addDashedSegments(dom.chartLinha, bpts, "#8fa6c8", 0.006, 0.008, 0.5);
   }
 
-  DADOS.anos.forEach((ano, i) => {
-    const v = serie[i];
-    const x = chartXFor(i);
-
-    const rot = el("a-text", Object.assign({
-      value: String(ano).slice(2),
-      position: `${x} ${round2(CH.baseY - 0.07)} 0.008`,
-      align: "center",
-      color: "#7e92b4",
-      font: FONTE,
-    }, escalaTexto(2, 0.04)));
-    dom.chartMarcadores.appendChild(rot);
-
-    if (v == null) return;
-
-    const y = chartYFor(v);
+  pts.forEach(({ x, y, i }) => {
     const ponto = el("a-entity", { position: `${x} ${y} 0.014` });
     const disco = el("a-circle", {
       radius: 0.019,
@@ -145,42 +149,37 @@ function buildSerie(ctx, serie, ind, narr) {
     });
     ponto.appendChild(anel);
     dom.chartMarcadores.appendChild(ponto);
-
-    // Alvo do olhar do ano: barra vertical fina e generosa em altura, para nao
-    // exigir mira precisa com o gaze (Fitts vale tambem para o olhar).
-    const hit = el("a-plane", {
-      class: "hit clickable alvo-ano",
-      width: 0.2,
-      height: CH.maxH + 0.16,
-      position: `${x} ${round2(CH.baseY + CH.maxH / 2)} 0.02`,
-      // Material invisivel: o raycaster acerta, nada e desenhado (nem escrito
-      // na profundidade - a etiqueta do evento nao sai mais picotada).
-      material: "visible: false",
-    });
-    hit.dataset.ano = String(i);
-    // So responde ao olhar com o painel aberto (alvosDoPainel, 50-interacao).
-    setClickable(hit, state.painelAberto);
-    dom.chartMarcadores.appendChild(hit);
-
     anoEls.push({ i, ponto, anel, disco, x, y });
   });
 
-  // Callouts do pico e do vale: os dois momentos que a serie realmente conta.
-  // Quem e o pior ano depende do SENTIDO do indicador (rotulosCallout, em
-  // 04-narrativa.js - a condicao 2D usa os mesmos cartoes).
+  // Callouts do pico e do vale (o desfecho): construidos ja, mostrados so no
+  // ultimo ano. Quem e o pior ano depende do SENTIDO do indicador
+  // (rotulosCallout, em 04-narrativa.js - a condicao 2D usa os mesmos cartoes).
   const cards = calloutsDaSerie(ctx, state.indicadorKey);
   cards.forEach((c, k) => {
     // Cards de 0,44 m com passo de 0,24 m entre anos: pico e vale proximos se
     // encavalariam, entao o segundo desce para baixo da linha.
     const colide = k > 0 && Math.abs(chartXFor(c.idx) - chartXFor(cards[0].idx)) < CALLOUT.w + 0.08;
-    buildCallout(c, serie, c.tipo === "critico" ? "#ff9f6b" : "#7fd4ff", colide ? "abaixo" : "acima");
+    serieEls.cards.push(buildCallout(c, serie, c.tipo === "critico" ? "#ff9f6b" : "#7fd4ff", colide ? "abaixo" : "acima"));
   });
 
-  buildEventos(serie);
+  serieEls.eventos = buildEventos(serie);
   applyPendingTransforms(dom.chartLinha);
   applyPendingTransforms(dom.chartMarcadores);
   applyPendingTransforms(dom.chartAnotacoes);
   refreshRaycasters();
+}
+
+// Mostra o grafico ate o ano idx: segmentos e pontos ate ele, a referencia
+// nacional ate ele, o evento quando a historia passa por ele e os cartoes so
+// no fim da serie.
+function revelarAte(idx, ctx) {
+  serieEls.segs.forEach((s) => setEntityVisible(s.el, s.i <= idx));
+  serieEls.ref.forEach((s) => setEntityVisible(s.el, s.i <= idx));
+  anoEls.forEach((a) => setEntityVisible(a.ponto, a.i <= idx));
+  serieEls.eventos.forEach((e) => e.els.forEach((x) => setEntityVisible(x, e.i <= idx)));
+  const fim = calloutsDaSerie(ctx, state.indicadorKey, idx).length > 0;
+  serieEls.cards.forEach((g) => setEntityVisible(g, fim));
 }
 
 const CALLOUT = { w: 0.44, h: 0.1, folga: 0.13 };
@@ -198,7 +197,7 @@ function buildCallout(card, serie, cor, lado) {
     lado === "abaixo"
       ? Math.max(y - CALLOUT.folga, CH.baseY + CALLOUT.h / 2 + 0.02)
       : Math.min(y + CALLOUT.folga, chartYFor(100) - 0.02);
-  const g = el("a-entity", { position: `${x} ${round2(yCard)} 0.024` });
+  const g = el("a-entity", { class: "callout", position: `${x} ${round2(yCard)} 0.024` });
   g.appendChild(
     el("a-plane", {
       width: CALLOUT.w,
@@ -233,46 +232,68 @@ function buildCallout(card, serie, cor, lado) {
     }, escalaPara(card.valor, 0.03, CALLOUT.w - 0.06)))
   );
   dom.chartAnotacoes.appendChild(g);
+  return g;
 }
 
 function buildEventos(serie) {
+  const lista = [];
   (DADOS.eventos || []).forEach((ev) => {
     const idx = DADOS.anos.indexOf(ev.ano);
     if (idx < 0 || serie[idx] == null) return;
     const x = chartXFor(idx);
     // Faixa vertical discreta + etiqueta rente ao eixo: o evento marca o ano
     // sem disputar espaco com o callout, que fica em cima da linha.
-    dom.chartAnotacoes.appendChild(
-      el("a-plane", {
-        width: 0.016,
-        height: CH.maxH,
-        position: `${x} ${round2(CH.baseY + CH.maxH / 2)} 0.006`,
-        material: "color: #ffd166; shader: flat; opacity: 0.18; transparent: true",
-      })
-    );
-    dom.chartAnotacoes.appendChild(
-      el("a-text", Object.assign({
-        value: rotuloEvento(ev),
-        position: `${x} ${round2(CH.baseY + 0.05)} 0.01`,
-        align: "center",
-        color: "#ffd166",
-        font: FONTE,
-      }, escalaPara(rotuloEvento(ev), 0.024, 0.42)))
-    );
+    const faixa = el("a-plane", {
+      width: 0.016,
+      height: CH.maxH,
+      position: `${x} ${round2(CH.baseY + CH.maxH / 2)} 0.006`,
+      material: "color: #ffd166; shader: flat; opacity: 0.18; transparent: true",
+    });
+    const etiqueta = el("a-text", Object.assign({
+      class: "evento",
+      value: rotuloEvento(ev),
+      position: `${x} ${round2(CH.baseY + 0.05)} 0.01`,
+      align: "center",
+      color: "#ffd166",
+      font: FONTE,
+    }, escalaPara(rotuloEvento(ev), 0.024, 0.42)));
+    dom.chartAnotacoes.appendChild(faixa);
+    dom.chartAnotacoes.appendChild(etiqueta);
+    lista.push({ i: idx, els: [faixa, etiqueta] });
   });
+  return lista;
 }
 
 // ---------------------------------------------------------------------------
-// Ano em foco
+// Ano da historia
+//
+// Quem muda o ano e o CORPO (a linha do tempo no piso, 70-faixa.js) - ou, na
+// condicao 2D, a rolagem. O olhar + pinca no grafico nao muda mais o ano:
+// com dois caminhos, nao se saberia o que o estudo mediu.
 // ---------------------------------------------------------------------------
 
-function selecionarAno(idx, comSom) {
-  const ctx = contextoById(state.regiaoId);
-  if (!ctx) return;
-  state.anoIdx = clampIdx(idx, DADOS.anos.length);
-  tlog("ano", { ano: DADOS.anos[state.anoIdx], regiao: state.regiaoId, indicador: state.indicadorKey });
-  updateAno(comSom);
+function definirAno(idx, origem, extra) {
+  const novo = clampIdx(idx, DADOS.anos.length);
+  if (novo === state.anoIdx) return false;
+  const de = state.anoIdx;
+  state.anoIdx = novo;
+  tlog("ano", Object.assign({
+    ano: DADOS.anos[novo],
+    de: de == null ? null : DADOS.anos[de],
+    via: origem || null,
+    regiao: state.regiaoId,
+    indicador: state.indicadorKey,
+  }, extra || {}));
+  updateAno(true);
+  updateMapa();
   updateContexto();
+  if (typeof pintarFaixa === "function") pintarFaixa();
+  return true;
+}
+
+// Compatibilidade (testes e console): o mesmo que definirAno.
+function selecionarAno(idx) {
+  return definirAno(idx, "api");
 }
 
 function updateAno(comSom) {
@@ -281,14 +302,20 @@ function updateAno(comSom) {
   const ind = indicadorByKey(state.indicadorKey);
   const serie = ctx.series[state.indicadorKey];
 
-  if (state.anoIdx == null) state.anoIdx = lastValidIndex(serie);
+  if (state.anoIdx == null) state.anoIdx = 0;
   const idx = state.anoIdx;
 
+  revelarAte(idx, ctx);
   anoEls.forEach((a) => {
     const ativo = a.i === idx;
-    setEntityVisible(a.anel, ativo);
+    setEntityVisible(a.anel, ativo && a.i <= idx);
     a.ponto.setAttribute("animation__s", `property: scale; to: ${ativo ? "1.5 1.5 1.5" : "1 1 1"}; dur: 150`);
   });
+
+  // A manchete do painel tambem so conhece a historia ate aqui.
+  setText(dom.painelManchete, computeNarrative(ctx, state.indicadorKey, idx).manchete);
+  setText(dom.painelAno, textoAnoPainel(idx));
+  setText(dom.painelEvento, textoEventoAno(idx));
 
   const v = serie[idx];
   setText(dom.chartReadout, textoLeituraAno(ctx, state.indicadorKey, idx));
@@ -333,7 +360,10 @@ function updateParede(ctx, idx, comSom) {
 // Linhas (segmentos de plano: sem geometria custom, 2 draw calls por trecho)
 // ---------------------------------------------------------------------------
 
+// Devolvem [{ i, el }]: i = indice do ano em que o trecho TERMINA (o trecho
+// aparece quando a historia chega nele).
 function addLineSegments(container, pts, color, z, thickness, opacity) {
+  const lista = [];
   for (let i = 0; i < pts.length - 1; i += 1) {
     const a = pts[i];
     const b = pts[i + 1];
@@ -342,19 +372,21 @@ function addLineSegments(container, pts, color, z, thickness, opacity) {
     const len = Math.sqrt(dx * dx + dy * dy);
     if (!len) continue;
     const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
-    container.appendChild(
-      el("a-plane", {
-        width: round2(len),
-        height: thickness,
-        position: `${round2((a.x + b.x) / 2)} ${round2((a.y + b.y) / 2)} ${z}`,
-        rotation: `0 0 ${round2(ang)}`,
-        material: `color: ${color}; shader: flat; opacity: ${opacity}; transparent: true`,
-      })
-    );
+    const seg = el("a-plane", {
+      width: round2(len),
+      height: thickness,
+      position: `${round2((a.x + b.x) / 2)} ${round2((a.y + b.y) / 2)} ${z}`,
+      rotation: `0 0 ${round2(ang)}`,
+      material: `color: ${color}; shader: flat; opacity: ${opacity}; transparent: true`,
+    });
+    container.appendChild(seg);
+    lista.push({ i: b.i, el: seg });
   }
+  return lista;
 }
 
 function addDashedSegments(container, pts, color, z, thickness, opacity, dash = 0.05, gap = 0.04) {
+  const lista = [];
   for (let i = 0; i < pts.length - 1; i += 1) {
     const a = pts[i];
     const b = pts[i + 1];
@@ -366,17 +398,18 @@ function addDashedSegments(container, pts, color, z, thickness, opacity, dash = 
     const passo = dash + gap;
     for (let d = 0; d + dash <= len; d += passo) {
       const t = (d + dash / 2) / len;
-      container.appendChild(
-        el("a-plane", {
-          width: dash,
-          height: thickness,
-          position: `${round2(a.x + dx * t)} ${round2(a.y + dy * t)} ${z}`,
-          rotation: `0 0 ${round2(ang)}`,
-          material: `color: ${color}; shader: flat; opacity: ${opacity}; transparent: true`,
-        })
-      );
+      const tr = el("a-plane", {
+        width: dash,
+        height: thickness,
+        position: `${round2(a.x + dx * t)} ${round2(a.y + dy * t)} ${z}`,
+        rotation: `0 0 ${round2(ang)}`,
+        material: `color: ${color}; shader: flat; opacity: ${opacity}; transparent: true`,
+      });
+      container.appendChild(tr);
+      lista.push({ i: b.i, el: tr });
     }
   }
+  return lista;
 }
 
 if (typeof module !== "undefined" && module.exports) {

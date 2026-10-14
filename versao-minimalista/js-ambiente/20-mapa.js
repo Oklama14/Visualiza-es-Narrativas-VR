@@ -239,7 +239,9 @@ function updateMapa() {
 
   Object.values(regioesEls).forEach(({ valor, handle, geo }) => {
     const ctx = contextoById(geo.id);
-    const v = ctx ? latestValue(ctx.series[state.indicadorKey]) : null;
+    // A mesa acompanha o ANO da linha do tempo (sem isso, a regiao de maior
+    // eficiencia em 2024 se responderia parado, de qualquer ponto da faixa).
+    const v = ctx ? valorNoAno(ctx.series[state.indicadorKey], state.anoIdx) : null;
     handle.setSegments(v == null ? [] : [{ cor: ind.cor, n: blocosPara(v) }]);
     setText(valor, textoValorRegiao(v));
   });
@@ -248,7 +250,7 @@ function updateMapa() {
     const c = colunaEls[i.key];
     if (!c) return;
     const ctxAtivo = contextoById(state.regiaoId || state.focoId) || DADOS.brasil;
-    const v = latestValue(ctxAtivo.series[i.key]);
+    const v = valorNoAno(ctxAtivo.series[i.key], state.anoIdx);
     c.handle.setSegments(v == null ? [] : [{ cor: i.cor, n: blocosPara(v) }]);
     setText(c.valor, v == null ? "-" : `${fmt(v)}%`);
     const ativo = i.key === state.indicadorKey;
@@ -256,7 +258,7 @@ function updateMapa() {
     c.grupo.setAttribute("animation__sel", `property: scale; to: ${ativo ? "1.08 1.08 1.08" : "1 1 1"}; dur: 160`);
   });
 
-  setText(dom.mesaValorTitulo, tituloMesa(state.indicadorKey));
+  setText(dom.mesaValorTitulo, tituloMesa(state.indicadorKey, state.anoIdx));
 }
 
 // Destaque da regiao sob o olhar (hover) e da regiao confirmada.

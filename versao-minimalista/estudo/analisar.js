@@ -20,8 +20,14 @@
 //                     para cada tipo de alvo, quadros por segundo (mediana e
 //                     % abaixo da meta), perdas de rastreio da mao, pincas sem
 //                     alvo
-//   2D .............. tempo em cada secao da pagina (mesa, painel, contexto)
-//   interacao ....... focos, paineis abertos, anos e indicadores trocados
+//   2D .............. tempo com o mouse em cada camada (mesa, painel,
+//                     contexto, trilha de anos) - o equivalente do olhar
+//   linha do tempo .. (v1, as duas condicoes) anos visitados, se percorreu os
+//                     8, trocas de ano (pelo corpo / pela rolagem), tempo em
+//                     cada ano, se chegou a 2024 antes da T1 e em que ano a
+//                     pessoa estava ao responder cada tarefa; na imersiva,
+//                     tempo sobre a faixa
+//   interacao ....... focos, paineis abertos e indicadores trocados
 //
 // As metricas de movimento e de olhar contam so a EXPLORACAO (entre as marcas
 // de inicio e fim da estacao); sem as marcas, a sessao inteira menos o treino.
@@ -33,6 +39,15 @@ const path = require("node:path");
 
 const RAIZ = path.resolve(__dirname, "..");
 const { PLANTA } = require(path.join(RAIZ, "js-ambiente", "00-planta.js"));
+// Os anos da historia (o fim dela e o ultimo).
+const ANOS = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(RAIZ, "dados.json"), "utf8")).anos;
+  } catch (e) {
+    return [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024];
+  }
+})();
+const ANO_FINAL = ANOS[ANOS.length - 1];
 
 const AMOSTRA_S = 0.5; // pos/rolagem a 2 Hz
 const SALTO_TELEPORTE_M = 1.0; // deslocamento > isto em 0,5 s sem evento = teleporte
@@ -92,8 +107,11 @@ const ZONA_MESA = caixa(PLANTA.mapa.cx, PLANTA.mapa.cz, PLANTA.mapa.w, PLANTA.ma
 const ZONA_CONTEXTO = caixa(PLANTA.contexto.cx, PLANTA.contexto.cz, PLANTA.contexto.w, PLANTA.contexto.d, MARGEM_ZONA_M);
 
 function zonaDe(x, z) {
-  // A zona de contexto vem antes: as duas caixas com margem se tocam no vao
-  // entre a mesa e o texto, e quem esta ali esta lendo.
+  // A faixa (o corredor da linha do tempo) vem primeiro: a caixa da mesa com
+  // margem a alcanca. Depois a zona de contexto: as duas caixas com margem se
+  // tocam no vao entre a mesa e o texto, e quem esta ali esta lendo.
+  const F = PLANTA.faixa;
+  if (F && Math.abs(z - F.z) <= F.corredorZ && x >= F.x0 - F.corredorX && x <= F.x1 + F.corredorX) return "faixa";
   if (dentro(ZONA_CONTEXTO, x, z)) return "contexto";
   if (dentro(ZONA_MESA, x, z)) return "mesa";
   if (Math.hypot(x - PLANTA.entrada.x, z - PLANTA.entrada.z) < MARGEM_ZONA_M) return "entrada";
@@ -196,6 +214,24 @@ function analisarGrupo(participante, condicao, eventos) {
       if (e.tempoMs != null) tempos.push(e.tempoMs / 1000);
     });
   out.tarefas_respondidas = Object.keys(porTarefa).length;
+
+  // ---- linha do tempo (strollytelling, piloto-v1) ----
+  // O ano em cada instante: eventos "ano" e as amostras de 2 Hz (pos/rolagem),
+  // que carregam o ano desde a v1.
+  const marcasAno = part
+    .filter((e) => (e.tipo === "ano" || e.tipo === "pos" || e.tipo === "rolagem") && e.ano != null)
+    .map((e) => ({ t: quando(e), ano: e.ano }));
+  const anoEm = (t) => {
+    let a = null;
+    for (const m of marcasAno) {
+      if (m.t > t) break;
+      a = m.ano;
+    }
+    return a;
+  };
+  Object.keys(porTarefa).forEach((id) => (out[`${id}_ano`] = anoEm(quando(porTarefa[id]))));
+  const inicioT1 = eventos.find((e) => e.tipo === "tarefa" && e.id === "T1" && (e.evento === "inicio" || e.evento === "exibida"));
+  out.chegou_ao_fim_antes_T1 = inicioT1 && marcasAno.length ? marcasAno.some((m) => m.ano === ANO_FINAL && m.t <= quando(inicioT1)) : null;
   out.acertos = acertos;
   out.acertos_estritos = estritos;
   out.tempo_medio_tarefa_s = tempos.length ? r1(tempos.reduce((a, b) => a + b, 0) / tempos.length) : null;
@@ -205,14 +241,29 @@ function analisarGrupo(participante, condicao, eventos) {
   const conta = (pred) => jan.filter(pred).length;
   out.focos = conta((e) => e.tipo === "foco");
   out.paineis_abertos = conta((e) => e.tipo === "painel" && e.evento === "abrir");
-  out.anos_vistos = conta((e) => e.tipo === "ano");
   out.trocas_indicador = conta((e) => e.tipo === "indicador");
+
+  // Linha do tempo na janela: so contam as trocas feitas pela pessoa (o corpo
+  // na faixa / a rolagem), nao a ancoragem pelo pesquisador.
+  const trocasAno = jan.filter((e) => e.tipo === "ano" && (e.via === "posicao" || e.via === "rolagem"));
+  out.trocas_ano = trocasAno.length;
+  out.voltas_no_tempo = trocasAno.filter((e) => e.de != null && e.ano < e.de).length;
+  const anosJan = new Set(jan.filter((e) => (e.tipo === "ano" || e.tipo === "pos" || e.tipo === "rolagem") && e.ano != null).map((e) => e.ano));
+  const anoNoInicio = expIni ? anoEm(quando(expIni)) : null;
+  if (anoNoInicio != null) anosJan.add(anoNoInicio);
+  out.anos_visitados = anosJan.size;
+  out.percorreu_todos = ANOS.every((a) => anosJan.has(a));
+  const amostras = jan.filter((e) => (e.tipo === "pos" || e.tipo === "rolagem") && e.ano != null);
+  const porAno = {};
+  amostras.forEach((e) => (porAno[e.ano] = (porAno[e.ano] || 0) + AMOSTRA_S));
+  ANOS.forEach((a) => (out[`tempo_ano_${a}_s`] = r1(porAno[a] || 0)));
 
   if (condicao === "2d") {
     out.cliques = conta((e) => e.tipo === "clique");
-    const secoes = {};
-    jan.filter((e) => e.tipo === "rolagem").forEach((e) => (secoes[e.secao || "nenhuma"] = (secoes[e.secao || "nenhuma"] || 0) + AMOSTRA_S));
-    ["mesa", "painel", "contexto"].forEach((s) => (out[`tempo_secao_${s}_s`] = r1(secoes[s] || 0)));
+    const rol = jan.filter((e) => e.tipo === "rolagem");
+    const mouse = {};
+    rol.forEach((e) => (mouse[e.mouse || "nenhuma"] = (mouse[e.mouse || "nenhuma"] || 0) + AMOSTRA_S));
+    ["mesa", "painel", "contexto", "trilha", "regua"].forEach((s) => (out[`tempo_mouse_${s}_s`] = r1(mouse[s] || 0)));
     return out;
   }
 
@@ -237,7 +288,7 @@ function analisarGrupo(participante, condicao, eventos) {
   out.metros_teleporte = r2(teleportado);
   out.proporcao_a_pe = andado + teleportado > 0 ? r2(andado / (andado + teleportado)) : null;
 
-  const zonas = { mesa: 0, contexto: 0, entrada: 0, outro: 0 };
+  const zonas = { faixa: 0, mesa: 0, contexto: 0, entrada: 0, outro: 0 };
   const olhar = {};
   pos.forEach((e) => {
     zonas[zonaDe(e.x, e.z)] += AMOSTRA_S;
@@ -245,7 +296,7 @@ function analisarGrupo(participante, condicao, eventos) {
     olhar[k] = (olhar[k] || 0) + AMOSTRA_S;
   });
   Object.keys(zonas).forEach((z) => (out[`tempo_zona_${z}_s`] = r1(zonas[z])));
-  ["regiao", "indicador", "ano", "destino", "acao", "nada"].forEach((k) => (out[`olhar_${k}_s`] = r1(olhar[k] || 0)));
+  ["regiao", "indicador", "destino", "acao", "nada"].forEach((k) => (out[`olhar_${k}_s`] = r1(olhar[k] || 0)));
 
   const xr = part.find((e) => e.tipo === "xr");
   const meta = (xr && xr.frameRate) || 72;

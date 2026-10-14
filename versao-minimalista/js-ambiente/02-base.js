@@ -174,7 +174,13 @@ function el(tagName, attributes = {}) {
 function setVectorAttribute(element, name, value) {
   const vector = parseVector(value);
   if (!vector) { element.setAttribute(name, value); return; }
-  element.setAttribute(name, `x: ${vector.x}; y: ${vector.y}; z: ${vector.z}`);
+  // "x y z" e o formato que o vec3 do A-Frame entende. O formato antigo
+  // ("x: 1; y: 2; z: 3") virava {x: NaN, y: 1, z: NaN} no componente; o
+  // object3D era corrigido logo depois, mas uma entidade que so inicializava
+  // depois desse acerto (filhos ainda carregando) ficava com posicao NaN - e o
+  // som posicional preso nela derrubava o laco de render (na v1, ao andar na
+  // linha do tempo logo depois de abrir uma regiao).
+  element.setAttribute(name, `${vector.x} ${vector.y} ${vector.z}`);
   applyObject3DVector(element, name, vector);
 }
 

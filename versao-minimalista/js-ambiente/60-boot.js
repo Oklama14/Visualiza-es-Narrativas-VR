@@ -15,11 +15,11 @@ const DOM_IDS = [
   "mesaMapa", "tampo", "tampoFace", "plinto", "regioes", "colunas",
   "mesaValorTitulo", "somBtn", "somLabel",
   "contextoSlabs", "contextoZona",
-  "painel", "painelFundo", "painelKicker", "painelTitulo", "painelManchete",
+  "painel", "painelFundo", "painelKicker", "painelTitulo", "painelManchete", "painelAno", "painelEvento",
   "painelAcento", "painelTopo", "painelFechar", "fio",
   "chartGrid", "chartLinha", "chartMarcadores", "chartAnotacoes", "chartReadout",
   "paredeHost", "paredeAno", "paredeLegConc", "paredeLegRet", "paredeLegEvad",
-  "discoUsuario", "discoEntrada", "discoContexto",
+  "discoUsuario", "discoContexto",
   "hudTitle", "hudSubtitle", "notaPanel", "notaTitle", "notaBody",
 ];
 
@@ -59,22 +59,32 @@ async function loadData() {
 }
 
 function initExperience() {
+  // A historia comeca no comeco: 2017, sob os pes de quem entra.
+  state.anoIdx = 0;
   buildSala();
   posicionarPlanta();
   buildMapa();
   buildContexto();
   buildPainel();
+  buildFaixa();
   bindEntradas();
 
+  // O painel fica sempre a vista: Brasil ate uma regiao ser aberta.
+  orientarPainel();
+  setEntityVisible(dom.painel, true);
+  alvosDoPainel(false);
+  renderPainel();
   updateContexto();
   pintarFoco();
+  // O corpo manda no ano (70-faixa.js).
+  dom.scene.setAttribute("faixa-tempo", "");
 
   setText(dom.hudTitle, "Camadas retóricas visíveis");
   setText(dom.hudSubtitle, "Eficiência acadêmica da Rede Federal · 2017–2024");
   setNota(
-    "Entrar, olhar, ver",
-    "O mapa na mesa é a camada de dados brutos: cada região tem 100 blocos e cada bloco vale 1%. " +
-      "Olhe para uma região e confirme: a visualização dela sobe no painel. O texto fica na zona de contexto, à direita — nunca por cima do dado."
+    "Ande no tempo",
+    "A linha do tempo no piso vai de 2017 a 2024: cada passo de lado é um ano, e o painel, a mesa e o texto acompanham. " +
+      "Olhe para uma região e confirme para vê-la no painel; sem região, o painel mostra o Brasil."
   );
 
   // Autoplay: o audio so pode iniciar depois de um gesto do usuario.
@@ -154,7 +164,9 @@ window.AMB = {
   confirmar,
   trocarIndicador,
   selecionarAno,
+  definirAno,
   abrirPainel,
   fecharPainel,
   irPara,
+  anoNaFaixa,
 };

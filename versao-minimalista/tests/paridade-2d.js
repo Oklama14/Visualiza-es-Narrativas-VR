@@ -3,10 +3,12 @@
 //
 // Abre a condicao imersiva (index.html, no modo desktop) e a 2D
 // (controle-2d.html) lado a lado, poe as duas no MESMO estado (indicador,
-// regiao aberta, ano) e compara todo texto que a pessoa le: titulo da mesa,
-// valores das 5 regioes e dos 4 indicadores, cabecalho e manchete do painel,
-// cartoes do grafico, leitura do ano, parede de 100 blocos e as 3 anotacoes
-// da zona de contexto. Qualquer diferenca vira falha - era assim que a
+// regiao aberta ou Brasil, ano) e compara todo texto que a pessoa le: titulo
+// da mesa, valores das 5 regioes e dos 4 indicadores, cabecalho, manchete e
+// ano do painel, cartoes do grafico VISIVEIS (o desfecho so em 2024), leitura
+// do ano, parede de 100 blocos e as 3 anotacoes da zona de contexto.
+// O ano chega como na sessao: na imersiva, a cabeca anda sobre a faixa; na
+// 2D, a pagina rola ate o passo do ano. Qualquer diferenca vira falha - era assim que a
 // retencao aparecia como "Melhor ano" no 2D e "MAIOR/MENOR" na VR.
 //
 //   node tests/paridade-2d.js
@@ -39,20 +41,26 @@ const LER_VR = () => {
   const colunas = {};
   Object.entries(colunaEls).forEach(([k, c]) => (colunas[k] = v(c.valor)));
   const out = { mesa: v(d.mesaValorTitulo), regioes, colunas, contexto: slabEls.map((s) => [v(s.kicker), v(s.titulo), v(s.corpo)]) };
-  if (window.AMB.state.painelAberto) {
-    const eventos = (DADOS.eventos || []).map(rotuloEvento);
-    const textos = Array.from(d.chartAnotacoes.querySelectorAll("a-text")).map(v).filter((t) => eventos.indexOf(t) < 0);
-    const callouts = [];
-    for (let i = 0; i + 1 < textos.length; i += 2) callouts.push([textos[i], textos[i + 1]]);
-    out.painel = {
-      kicker: v(d.painelKicker),
-      titulo: v(d.painelTitulo),
-      manchete: v(d.painelManchete),
-      readout: v(d.chartReadout),
-      callouts,
-      parede: [v(d.paredeAno), v(d.paredeLegConc), v(d.paredeLegRet), v(d.paredeLegEvad)],
-    };
-  }
+  const visivel = (e) => {
+    for (let o = e.object3D; o; o = o.parent) if (!o.visible) return false;
+    return true;
+  };
+  // So os cartoes que a pessoa VE (eles existem desde o inicio, escondidos
+  // ate o fim da historia).
+  const callouts = Array.from(d.chartAnotacoes.querySelectorAll(".callout"))
+    .filter(visivel)
+    .map((g) => Array.from(g.querySelectorAll("a-text")).map(v));
+  out.painel = {
+    kicker: v(d.painelKicker),
+    titulo: v(d.painelTitulo),
+    manchete: v(d.painelManchete),
+    ano: v(d.painelAno),
+    evento: v(d.painelEvento),
+    readout: v(d.chartReadout),
+    callouts,
+    parede: [v(d.paredeAno), v(d.paredeLegConc), v(d.paredeLegRet), v(d.paredeLegEvad)],
+  };
+  out.anoIdx = window.AMB.state.anoIdx;
   return out;
 };
 
@@ -68,16 +76,17 @@ const LER_2D = () => {
     b.querySelector(".c").textContent,
   ]);
   const out = { mesa: t("mesaValorTitulo"), regioes, colunas, contexto };
-  if (window.CONTROLE2D.state.painelAberto) {
-    out.painel = {
-      kicker: t("painelKicker"),
-      titulo: t("painelTitulo"),
-      manchete: t("painelManchete"),
-      readout: t("chartReadout"),
-      callouts: JSON.parse(document.getElementById("grafico").dataset.callouts || "[]"),
-      parede: [t("paredeAno"), t("paredeLegConc"), t("paredeLegRet"), t("paredeLegEvad")],
-    };
-  }
+  out.painel = {
+    kicker: t("painelKicker"),
+    titulo: t("painelTitulo"),
+    manchete: t("painelManchete"),
+    ano: t("painelAno"),
+    evento: t("painelEvento"),
+    readout: t("chartReadout"),
+    callouts: JSON.parse(document.getElementById("grafico").dataset.callouts || "[]"),
+    parede: [t("paredeAno"), t("paredeLegConc"), t("paredeLegRet"), t("paredeLegEvad")],
+  };
+  out.anoIdx = window.CONTROLE2D.state.anoIdx;
   return out;
 };
 
@@ -114,10 +123,14 @@ function comparar(rotulo, a, b, caminho) {
   const dados = JSON.parse(fs.readFileSync(path.join(ROOT, "dados.json"), "utf8"));
   const inds = dados.indicadores.map((i) => i.key);
   const regs = dados.regioes.map((r) => r.id);
+  // Brasil e cada regiao, cada indicador, no inicio, no meio (2020, o ano do
+  // evento) e no fim da historia (2024, com o desfecho).
+  const ANOS = [0, 3, 7];
   const estados = [];
-  inds.forEach((k) => estados.push({ k, r: null, a: null }));
-  regs.forEach((r) => inds.forEach((k) => [null, 0, 3].forEach((a) => estados.push({ k, r, a }))));
+  [null].concat(regs).forEach((r) => inds.forEach((k) => ANOS.forEach((a) => estados.push({ k, r, a }))));
 
+  // Imersiva: o ano e do corpo. A camera (a cabeca, no desktop) anda de lado
+  // ate o centro do trecho do ano - a ancora poe 2017 sob a cabeca.
   const aplicarVR = async (e) =>
     vr.evaluate(async (e) => {
       const A = window.AMB;
@@ -125,9 +138,11 @@ function comparar(rotulo, a, b, caminho) {
       setFoco(null);
       A.trocarIndicador(e.k);
       if (e.r) A.abrirPainel(e.r);
-      if (e.r && e.a != null) A.selecionarAno(e.a);
-      await new Promise((r) => setTimeout(r, 30));
+      document.getElementById("camera").object3D.position.x = e.a * A.PLANTA.faixa.trecho;
+      const t0 = performance.now();
+      while (A.state.anoIdx !== e.a && performance.now() - t0 < 3000) await new Promise((r) => setTimeout(r, 20));
     }, e);
+  // 2D: a pagina rola ate o passo do ano.
   const aplicar2D = async (e) =>
     d2.evaluate((e) => {
       const C = window.CONTROLE2D;
@@ -135,7 +150,7 @@ function comparar(rotulo, a, b, caminho) {
       C.setFoco(null);
       C.trocarIndicador(e.k);
       if (e.r) C.abrirPainel(e.r);
-      if (e.r && e.a != null) C.selecionarAno(e.a);
+      C.rolarParaAno(e.a);
     }, e);
 
   let comparados = 0;
@@ -144,8 +159,10 @@ function comparar(rotulo, a, b, caminho) {
     await aplicar2D(e);
     const a = await vr.evaluate(LER_VR);
     const b = await d2.evaluate(LER_2D);
-    comparar(`[${e.k}${e.r ? " / " + e.r : ""}${e.a != null ? " / ano " + e.a : ""}]`, a, b);
-    ok(!!a.painel === !!e.r, `painel da VR ${a.painel ? "aberto" : "fechado"} no estado ${JSON.stringify(e)}`);
+    comparar(`[${e.k} / ${e.r || "brasil"} / ${2017 + e.a}]`, a, b);
+    ok(a.anoIdx === e.a, `a imersiva nao chegou ao ano ${2017 + e.a} andando (ficou em ${a.anoIdx})`);
+    ok(e.a === 7 || a.painel.callouts.length === 0, `desfecho visivel antes do fim em ${JSON.stringify(e)}`);
+    ok(e.a !== 7 || a.painel.callouts.length > 0, `sem desfecho em 2024 em ${JSON.stringify(e)}`);
     comparados += 1;
   }
 
@@ -162,13 +179,14 @@ function comparar(rotulo, a, b, caminho) {
   await browser.close();
   server.close();
 
-  console.log(`\nParidade 2D x imersiva: ${comparados} estados comparados (${inds.length} indicadores x ${regs.length} regioes x 3 anos + visao Brasil)`);
+  console.log(`\nParidade 2D x imersiva: ${comparados} estados comparados ((Brasil + ${regs.length} regioes) x ${inds.length} indicadores x ${ANOS.length} anos, o ano chegando pelo corpo e pela rolagem)`);
   if (falhas.length) {
     falhas.slice(0, 25).forEach((f) => console.log("  ✗ " + f));
     console.log(`\nFALHOU: ${falhas.length} diferenca(s).`);
     process.exit(1);
   }
-  console.log("  ✓ textos, valores, cartoes do grafico, parede de blocos e anotacoes identicos");
+  console.log("  ✓ textos, valores, ano do painel, cartoes VISIVEIS do grafico, parede de blocos e anotacoes identicos");
+  console.log("  ✓ o desfecho (pior/melhor ano) so aparece em 2024, nas duas condicoes");
   console.log("  ✓ tarefas e gabarito vindos do mesmo modulo (07-tarefas.js)");
   console.log("\nparidade: tudo verde.");
 })().catch((e) => {

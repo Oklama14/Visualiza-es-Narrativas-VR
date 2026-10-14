@@ -19,8 +19,10 @@
 // O que e registrado, alem dos eventos de interacao de cada modulo (tlog):
 //   versao   artefato, ?v= dos scripts, navegador/sistema (userAgent), A-Frame
 //   pos      (imersiva, 2 Hz) posicao da cabeca, guinada/inclinacao em graus,
-//            se esta em VR, quadros por segundo e o alvo sob o olhar
-//   rolagem  (2D, 2 Hz) posicao da rolagem e a secao mais visivel
+//            se esta em VR, quadros por segundo, o alvo sob o olhar e o ano
+//            da linha do tempo em que a pessoa esta
+//   rolagem  (2D, 2 Hz) posicao da rolagem, a secao mais visivel, a secao sob
+//            o mouse e o ano
 //   xr       taxa de quadros da sessao imersiva
 //   entrada  fontes de entrada ativas (maos / controles) a cada troca
 // ----------------------------------------------------------------------------
@@ -38,7 +40,7 @@
 
   // Versao do artefato que vai junto de CADA sessao. Suba quando o artefato
   // mudar (piloto-v0 -> estudo-v1): a analise separa as sessoes por ela.
-  const VERSAO_ARTEFATO = "piloto-v0";
+  const VERSAO_ARTEFATO = "piloto-v1";
 
   const sessao = novaSessao();
   const eventos = []; // tudo o que foi coletado (para o download)
@@ -259,6 +261,31 @@
     return fps;
   }
 
+  // Ano da linha do tempo (state e DADOS moram em 02-base.js, escopo global,
+  // carregado depois deste arquivo - por isso a consulta e feita na hora).
+  function anoAtual() {
+    try {
+      // eslint-disable-next-line no-undef
+      if (typeof state === "undefined" || typeof DADOS === "undefined" || !DADOS || state.anoIdx == null) return null;
+      // eslint-disable-next-line no-undef
+      return DADOS.anos[state.anoIdx];
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Secao sob o mouse (2D): na v1 o palco fixo mostra as tres camadas ao mesmo
+  // tempo, entao "a mais visivel" nao diz para onde a pessoa olha - o mouse e
+  // o equivalente mais proximo do alvo sob o olhar da imersiva.
+  let secaoMouse = null;
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("mousemove", (ev) => {
+      const el = ev.target && ev.target.closest ? ev.target.closest("[data-secao]") : null;
+      secaoMouse = el ? el.dataset.secao : "fora";
+    }, { passive: true });
+    document.addEventListener("mouseleave", () => (secaoMouse = null));
+  }
+
   // Secao mais visivel da pagina 2D (elementos com data-secao).
   function secaoVisivel() {
     let melhor = null;
@@ -294,6 +321,7 @@
         alvo = null;
       }
       window.tlog("pos", {
+        ano: anoAtual(),
         x: +p.x.toFixed(2),
         y: +p.y.toFixed(2),
         z: +p.z.toFixed(2),
@@ -312,6 +340,8 @@
       h: window.innerHeight,
       H: doc.scrollHeight,
       secao: secaoVisivel(),
+      mouse: secaoMouse,
+      ano: anoAtual(),
     });
   }
 

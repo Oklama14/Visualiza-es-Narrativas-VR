@@ -19,7 +19,7 @@ const DIR = path.join(ROOT, "js-ambiente");
 const ORDEM = [
   "00-planta", "01-telemetria", "02-base", "03-audio", "04-narrativa",
   "05-headset", "07-tarefas", "10-voxel", "15-sala", "20-mapa", "30-contexto", "40-painel",
-  "50-interacao", "60-boot", "85-treino", "90-estudo",
+  "50-interacao", "60-boot", "70-faixa", "85-treino", "90-estudo",
 ];
 
 function stubEl() {
@@ -191,6 +191,78 @@ const CHECKS = String.raw`
      "G9: o ponto de observacao caiu DENTRO da mesa");
 
   // ========================================================================
+  // F - Linha do tempo no piso (strollytelling, 70-faixa.js)
+  // ========================================================================
+
+  var F = PLANTA.faixa;
+  var FAIXA_BOX = { x0: F.x0, x1: F.x1, z0: F.z - F.largura / 2, z1: F.z + F.largura / 2 };
+
+  // F1: um trecho por ano, de ponta a ponta.
+  ok(F.anos === DADOS.anos.length, "F1: a faixa tem " + F.anos + " trechos e a serie " + DADOS.anos.length + " anos");
+  ok(Math.abs(F.x1 - F.x0 - F.anos * F.trecho) < 1e-6, "F1: o comprimento da faixa nao e anos x trecho");
+  ok(F.trecho >= 0.15 && F.trecho <= 0.3, "F1: trecho de " + F.trecho + " m (um passo lateral curto e 15-30 cm)");
+  ok(F.histerese > 0 && F.histerese < F.trecho / 2, "F1: a folga das fronteiras precisa ser menor que meio trecho");
+
+  // F2: cabe na sala com folga e nao pisa na mesa nem na zona de contexto.
+  // (a pessoa fica sobre a linha central: e ali que a parede de tras importa)
+  ok(dentro(FAIXA_BOX, SALA, 0.2), "F2: a faixa encosta na parede (folga < 0,2 m)");
+  ok(PLANTA.sala.d / 2 - F.z >= 0.35, "F2: quem esta na faixa fica a " + (PLANTA.sala.d / 2 - F.z).toFixed(2) + " m da parede de tras (minimo 0,35 m)");
+  ok(!sobrepoe(FAIXA_BOX, MESA), "F2: a faixa invade a mesa do mapa");
+  ok(!sobrepoe(FAIXA_BOX, CTX), "F2: a faixa invade a zona de contexto");
+  ok(FAIXA_BOX.z0 - MESA.z1 >= 0.3, "F2: a faixa fica a " + (FAIXA_BOX.z0 - MESA.z1).toFixed(2) + " m da mesa (minimo 0,3 m para o corpo)");
+
+  // F3: cabe na area real de 2 x 2 m do protocolo (com 20 cm de cada lado).
+  ok(F.comprimento <= 1.6 + 1e-6, "F3: a faixa tem " + F.comprimento + " m - nao cabe com folga numa area de 2 x 2 m");
+
+  // F4: a regra do ano. Centro de cada trecho = aquele ano; nas fronteiras,
+  // so muda depois de passar a folga (sem pisca-pisca de quem balanca o corpo);
+  // fora do corredor, o ano fica como estava.
+  for (var a = 0; a < F.anos; a += 1) {
+    var xc = F.x0 + (a + 0.5) * F.trecho;
+    ok(anoNaFaixa(xc, F.z, null) === a, "F4: o centro do trecho " + a + " nao da o ano " + a);
+    ok(anoNaFaixa(xc, F.z, a) === a, "F4: parado no centro do trecho " + a + " o ano muda");
+  }
+  for (var b = 1; b < F.anos; b += 1) {
+    var xb = F.x0 + b * F.trecho;
+    var dentroFolga = F.histerese * 0.6, foraFolga = F.histerese * 1.2;
+    ok(anoNaFaixa(xb + dentroFolga, F.z, b - 1) === b - 1, "F4: o ano " + (b - 1) + " vira " + b + " antes da folga");
+    ok(anoNaFaixa(xb + foraFolga, F.z, b - 1) === b, "F4: o ano " + (b - 1) + " nao vira " + b + " depois da folga");
+    ok(anoNaFaixa(xb - dentroFolga, F.z, b) === b, "F4: voltando, o ano " + b + " vira " + (b - 1) + " antes da folga");
+    ok(anoNaFaixa(xb - foraFolga, F.z, b) === b - 1, "F4: voltando, o ano " + b + " nao vira " + (b - 1) + " depois da folga");
+  }
+  ok(anoNaFaixa(F.x0 - 0.2, F.z, 3) === 0, "F4: alem da ponta de 2017 o ano nao e 2017");
+  ok(anoNaFaixa(F.x1 + 0.2, F.z, 3) === F.anos - 1, "F4: alem da ponta de 2024 o ano nao e 2024");
+  ok(anoNaFaixa(F.cx, F.z + F.corredorZ + 0.1, 5) === 5, "F4: fora do corredor (atras da faixa) o ano mudou");
+  ok(anoNaFaixa(F.cx, F.z - F.corredorZ - 0.1, 2) === 2, "F4: fora do corredor (perto da mesa) o ano mudou");
+  ok(anoNaFaixa(F.x1 + F.corredorX + 0.1, F.z, 4) === 4, "F4: longe da ponta o ano mudou");
+  ok(anoNaFaixa(F.cx, F.z + F.corredorZ + 0.1, null) == null, "F4: fora do corredor, sem ano, inventou um ano");
+
+  // F5: o painel e legivel das DUAS pontas da faixa (ele encara o centro).
+  [["2017", F.x0], ["2024", F.x1]].forEach(function (pt) {
+    var ddx = PLANTA.painel.cx - pt[1], ddz = PLANTA.painel.cz - F.z;
+    var dist = Math.sqrt(ddx * ddx + ddz * ddz);
+    var largura = 2 * Math.atan2(PLANTA.painel.w / 2, dist) * 180 / Math.PI;
+    var normal = Math.atan2(PLANTA.usuario.x - PLANTA.painel.cx, PLANTA.usuario.z - PLANTA.painel.cz);
+    var visada = Math.atan2(pt[1] - PLANTA.painel.cx, F.z - PLANTA.painel.cz);
+    var obliquo = Math.abs(visada - normal) * 180 / Math.PI;
+    ok(dist >= 1.2, "F5: da ponta de " + pt[0] + " o painel fica a " + dist.toFixed(2) + " m (perto demais)");
+    ok(largura <= 82, "F5: da ponta de " + pt[0] + " o painel ocupa " + largura.toFixed(1) + " graus");
+    ok(obliquo <= 35, "F5: da ponta de " + pt[0] + " o painel e visto " + obliquo.toFixed(1) + " graus de lado");
+    nota("F5 da ponta de " + pt[0] + ": painel a " + dist.toFixed(2) + " m, " + largura.toFixed(1) + " graus, " + obliquo.toFixed(1) + " graus de lado");
+  });
+
+  // F6: o disco de volta fica na sala, fora da faixa e da mesa, e perto da zona
+  // de contexto (e de la que se volta).
+  var DF = PLANTA.discoFaixa;
+  ok(DF.x > SALA.x0 + 0.3 && DF.x < SALA.x1 - 0.3 && DF.z > SALA.z0 + 0.3 && DF.z < SALA.z1 - 0.3, "F6: o disco de volta caiu fora da sala");
+  ok(DF.x < F.x0 - 0.3 || DF.x > F.x1 + 0.3, "F6: o disco de volta encosta na faixa (quem anda olhando o piso o mira sem querer)");
+  var discoCtx = { x: PLANTA.contexto.cx, z: PLANTA.contexto.cz + PLANTA.contexto.d / 2 + 0.55 };
+  var dCtx = Math.hypot(DF.x - discoCtx.x, DF.z - discoCtx.z);
+  ok(dCtx <= 2.5, "F6: o disco de volta fica a " + dCtx.toFixed(2) + " m de quem esta na zona de contexto (dificil de mirar)");
+  ok(!(DF.x > MESA.x0 && DF.x < MESA.x1 && DF.z > MESA.z0 && DF.z < MESA.z1), "F6: o disco de volta caiu dentro da mesa");
+  nota("F faixa x " + F.x0 + " a " + F.x1 + ", z " + F.z + "; trecho " + F.trecho + " m, folga " + F.histerese + " m; disco de volta em (" + DF.x + ", " + DF.z + ")");
+
+  // ========================================================================
   // C - Conforto no Quest 2
   // ========================================================================
 
@@ -351,6 +423,32 @@ const CHECKS = String.raw`
   ok(Math.abs(chartYFor(0) - CH.baseY) < 1e-6 && Math.abs(chartYFor(100) - (CH.baseY + CH.maxH)) < 1e-6,
      "D6: o eixo de valores nao vai de 0 a 100%");
 
+  // D7: a historia se revela por passos e NUNCA adianta o futuro: antes de
+  // 2024, nenhum texto cita um ano que a pessoa ainda nao percorreu, e os
+  // callouts (pior/melhor ano) so existem no ultimo ano.
+  var revelacoes = 0;
+  contextos.forEach(function (ctx) {
+    DADOS.indicadores.forEach(function (ind) {
+      var serie = ctx.series[ind.key];
+      var ultimoValido = lastValidIndex(serie);
+      DADOS.anos.forEach(function (ano, idx) {
+        var n = computeNarrative(ctx, ind.key, idx);
+        ok(!suspeito.test(n.manchete + n.texto + n.comparativo), "D7: narrativa suja ate " + ano + " em " + ctx.id + "/" + ind.key);
+        ok(n.completa === (idx >= ultimoValido), "D7: 'completa' errado ate " + ano + " em " + ctx.id + "/" + ind.key);
+        var textos = anotacoes(ctx, ind.key, idx).map(function (bl) { return bl.corpo; }).join(" ") + " " + n.manchete;
+        var futuros = (textos.match(/20[12][0-9]/g) || []).filter(function (y) { return Number(y) > ano; });
+        ok(futuros.length === 0, "D7: ate " + ano + ", o texto de " + ctx.id + "/" + ind.key + " ja cita " + futuros.join(", "));
+        var cs = calloutsDaSerie(ctx, ind.key, idx);
+        if (idx < ultimoValido) ok(cs.length === 0, "D7: callout antes do fim (ate " + ano + ") em " + ctx.id + "/" + ind.key);
+        revelacoes += 1;
+      });
+      ok(calloutsDaSerie(ctx, ind.key, DADOS.anos.length - 1).length > 0, "D7: sem callouts no fim da historia em " + ctx.id + "/" + ind.key);
+    });
+  });
+  ok(/2024/.test(tituloMesa("eficiencia", 7)) && /2017/.test(tituloMesa("eficiencia", 0)), "D7: o titulo da mesa nao acompanha o ano");
+  ok(kickerPainel(DADOS.brasil) !== kickerPainel(DADOS.regioes[0]), "D7: o painel do Brasil e o de uma regiao tem o mesmo cabecalho");
+  nota("D7 " + revelacoes + " passos da historia sem adiantar o futuro");
+
   // ========================================================================
   // T - Tarefas do estudo (07-tarefas.js) e treino (85-treino.js)
   // ========================================================================
@@ -384,8 +482,13 @@ const CHECKS = String.raw`
   ["inicio", "alvo", "disco", "marca"].forEach(function (k) {
     ok(dentroSala(TREINO_PONTOS[k], 0.4), "T3: o ponto de treino '" + k + "' fica a menos de 0,4 m da parede");
   });
-  var passo = Math.hypot(TREINO_PONTOS.marca.x - TREINO_PONTOS.disco.x, TREINO_PONTOS.marca.z - TREINO_PONTOS.disco.z);
-  ok(passo >= 0.4 && passo <= 0.8, "T3: a marca do passo esta a " + passo.toFixed(2) + " m de quem chega pelo disco (esperado 0,4-0,8 m)");
+  // O passo e LATERAL (para a direita, como na linha do tempo de verdade) e
+  // atravessa uma fronteira de ano com a mesma folga.
+  var passo = TREINO_PONTOS.marca.x - TREINO_PONTOS.disco.x;
+  ok(Math.abs(TREINO_PONTOS.marca.z - TREINO_PONTOS.disco.z) < 1e-6, "T3: o passo do treino nao e lateral");
+  ok(passo >= 0.2 && passo <= 0.5, "T3: o passo lateral do treino tem " + passo.toFixed(2) + " m (esperado 0,2-0,5 m)");
+  ok(Math.abs(passo - TREINO_TRECHO) < 1e-6, "T3: a marca de 2018 nao fica no centro do 2o trecho");
+  ok(TREINO_HISTERESE === PLANTA.faixa.histerese, "T3: o treino usa outra folga de fronteira que a linha do tempo");
   var dAlvo = Math.hypot(TREINO_PONTOS.alvo.x - TREINO_PONTOS.inicio.x, TREINO_PONTOS.alvo.z - TREINO_PONTOS.inicio.z);
   var elevAlvo = Math.atan2(TREINO_PONTOS.alvo.y - 1.6, dAlvo) * 180 / Math.PI;
   ok(elevAlvo > -25 && elevAlvo < 10, "T3: o alvo de pinca fica a " + elevAlvo.toFixed(1) + " graus do olhar");
@@ -412,7 +515,14 @@ const CHECKS = String.raw`
     var r2 = /\bdom\.([A-Za-z0-9_]+)\b/g, mm;
     while ((mm = r2.exec(codigo))) usados[mm[1]] = nome;
   });
+  // Entidades criadas em JS (dom.X = ...) nao precisam estar no HTML.
+  var criados = {};
+  Object.keys(__fontes).forEach(function (nome) {
+    var r3 = /\bdom\.([A-Za-z0-9_]+)\s*=[^=]/g, m4;
+    while ((m4 = r3.exec(__fontes[nome]))) criados[m4[1]] = true;
+  });
   Object.keys(usados).forEach(function (chave) {
+    if (criados[chave]) return;
     ok(DOM_IDS.indexOf(chave) >= 0,
        "H2: " + usados[chave] + " usa dom." + chave + ", que nao esta em DOM_IDS (vai ser undefined)");
   });
