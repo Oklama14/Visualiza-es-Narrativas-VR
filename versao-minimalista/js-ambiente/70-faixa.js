@@ -59,13 +59,15 @@ function buildFaixa() {
     return { i, x, placa, rotuloAno };
   });
 
-  // Sentido do tempo, nas pontas (do lado da mesa, fora do rotulo da camada).
-  const zSentido = round2(F.z - F.largura / 2 - 0.06);
+  // Sentido do tempo, nas PONTAS, na linha da faixa: "< PASSADO 2017 ... 2024
+  // FUTURO >". Do lado da mesa eles formavam uma linha so com o rotulo
+  // "CAMADA DE DADOS BRUTOS" do piso.
+  const zSentido = F.z;
   raiz.appendChild(
     el("a-text", Object.assign({
       value: "< PASSADO",
       rotation: "-90 0 0",
-      position: `${round2(F.x0 + 0.2)} 0.012 ${zSentido}`,
+      position: `${round2(F.x0 - 0.17)} 0.012 ${zSentido}`,
       align: "center",
       color: "#5f7797",
       font: FONTE,
@@ -75,7 +77,7 @@ function buildFaixa() {
     el("a-text", Object.assign({
       value: "FUTURO >",
       rotation: "-90 0 0",
-      position: `${round2(F.x1 - 0.2)} 0.012 ${zSentido}`,
+      position: `${round2(F.x1 + 0.17)} 0.012 ${zSentido}`,
       align: "center",
       color: "#5f7797",
       font: FONTE,

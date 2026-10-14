@@ -169,6 +169,36 @@ const CHECKS = String.raw`
        " (visada a " + yNaColuna.toFixed(3) + " m, topo da coluna a " + topoCol.toFixed(3) + " m)");
   });
 
+  // G10: de nenhum ano da linha do tempo uma coluna de indicador fica entre o
+  // olho e o nome/valor de uma regiao. (Com o passo regular das colunas, de
+  // 2024 a coluna de Eficiencia tapava o Sul - a resposta da T2.) Os rotulos
+  // ficam na faixa entre a placa e a borda de quem olha (20-mapa.js: nome a
+  // 4,5 cm e valor a 9,5 cm da borda da placa).
+  var topoColuna = PLANTA.mapa.topo + COLUNAS.y0 + 0.03 + (COLUNAS.cols - 1) * COLUNAS.gap + COLUNAS.size / 2;
+  var meiaLarg = ((COLUNAS.cols - 1) * COLUNAS.gap + COLUNAS.size + 0.06) / 2;
+  var meiaPl = ((PLACA.cols - 1) * PLACA.gap + PLACA.size) / 2;
+  var tapados = [];
+  for (var ia = 0; ia < PLANTA.faixa.anos; ia += 1) {
+    var olho = { x: PLANTA.faixa.x0 + (ia + 0.5) * PLANTA.faixa.trecho - PLANTA.mapa.cx, y: 1.6, z: PLANTA.faixa.z - PLANTA.mapa.cz };
+    REGIOES_MESA.forEach(function (r) {
+      var perto = Math.min(0, r.d / 2 - PLACA.faixaRotulos - meiaPl) + meiaPl;
+      [0.045, 0.095].forEach(function (dz) {
+        [-0.08, 0, 0.08].forEach(function (dx) {
+          var p = { x: r.x + dx, y: PLANTA.mapa.topo + 0.024, z: r.z + perto + dz };
+          COLUNAS.xs.forEach(function (cx, k) {
+            if (!(p.z < COLUNAS.z && COLUNAS.z < olho.z)) return;
+            var t = (olho.z - COLUNAS.z) / (olho.z - p.z);
+            var x = olho.x + t * (p.x - olho.x);
+            var y = olho.y + t * (p.y - olho.y);
+            if (Math.abs(x - cx) < meiaLarg && y < topoColuna) tapados.push(r.id + " de " + (2017 + ia) + " pela coluna " + k);
+          });
+        });
+      });
+    });
+  }
+  ok(tapados.length === 0, "G10: colunas tapam rotulos de regiao vistos da linha do tempo: " + tapados.slice(0, 4).join("; "));
+  if (!tapados.length) nota("G10 nenhuma coluna entre o olho (8 anos da faixa) e os rotulos das 5 regioes");
+
   // G8: a entrada e um vao de verdade na parede proxima, e as duas metades
   // somam a largura da sala.
   var vao = 1.15;

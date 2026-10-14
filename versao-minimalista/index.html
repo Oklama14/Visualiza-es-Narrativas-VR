@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050711'/%3E%3Crect x='14' y='22' width='36' height='26' rx='3' fill='%231d9e75'/%3E%3Crect x='18' y='10' width='28' height='8' rx='2' fill='%238b7fe8'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=23" />
+    <link rel="stylesheet" href="styles.css?v=24" />
     <!-- A-Frame: tenta a copia LOCAL (offline) e cai no CDN se ela nao existir. -->
     <script src="assets/aframe-1.5.0.min.js"></script>
     <script>
@@ -274,13 +274,16 @@
         <a-entity id="contextoSlabs"></a-entity>
       </a-entity>
 
-      <!-- Fio que liga a regiao em foco ao painel (o tracejado do desenho). -->
+      <!-- Fio que liga a regiao em foco ao painel (o tracejado do desenho).
+           Fino e translucido: de alguns pontos da faixa ele passa na frente do
+           nome ou do valor de uma regiao de tras, e o texto tem de continuar
+           legivel atraves dele. -->
       <a-cylinder
         id="fio"
-        radius="0.006"
+        radius="0.0035"
         height="0.3"
         visible="false"
-        material="color: #8b7fe8; shader: flat; opacity: 0.55; transparent: true"
+        material="color: #8b7fe8; shader: flat; opacity: 0.4; transparent: true"
       ></a-cylinder>
 
       <!-- =================================================================
@@ -332,22 +335,22 @@
     </a-scene>
 
     <!-- Ordem importa: planta -> telemetria -> base -> dados/audio -> headset -> tarefas -> construtores -> boot -> linha do tempo -> treino -> estudo. -->
-    <script src="js-ambiente/00-planta.js?v=23"></script>
-    <script src="js-ambiente/01-telemetria.js?v=23"></script>
-    <script src="js-ambiente/02-base.js?v=23"></script>
-    <script src="js-ambiente/03-audio.js?v=23"></script>
-    <script src="js-ambiente/04-narrativa.js?v=23"></script>
-    <script src="js-ambiente/05-headset.js?v=23"></script>
-    <script src="js-ambiente/07-tarefas.js?v=23"></script>
-    <script src="js-ambiente/10-voxel.js?v=23"></script>
-    <script src="js-ambiente/15-sala.js?v=23"></script>
-    <script src="js-ambiente/20-mapa.js?v=23"></script>
-    <script src="js-ambiente/30-contexto.js?v=23"></script>
-    <script src="js-ambiente/40-painel.js?v=23"></script>
-    <script src="js-ambiente/50-interacao.js?v=23"></script>
-    <script src="js-ambiente/60-boot.js?v=23"></script>
-    <script src="js-ambiente/70-faixa.js?v=23"></script>
-    <script src="js-ambiente/85-treino.js?v=23"></script>
-    <script src="js-ambiente/90-estudo.js?v=23"></script>
+    <script src="js-ambiente/00-planta.js?v=24"></script>
+    <script src="js-ambiente/01-telemetria.js?v=24"></script>
+    <script src="js-ambiente/02-base.js?v=24"></script>
+    <script src="js-ambiente/03-audio.js?v=24"></script>
+    <script src="js-ambiente/04-narrativa.js?v=24"></script>
+    <script src="js-ambiente/05-headset.js?v=24"></script>
+    <script src="js-ambiente/07-tarefas.js?v=24"></script>
+    <script src="js-ambiente/10-voxel.js?v=24"></script>
+    <script src="js-ambiente/15-sala.js?v=24"></script>
+    <script src="js-ambiente/20-mapa.js?v=24"></script>
+    <script src="js-ambiente/30-contexto.js?v=24"></script>
+    <script src="js-ambiente/40-painel.js?v=24"></script>
+    <script src="js-ambiente/50-interacao.js?v=24"></script>
+    <script src="js-ambiente/60-boot.js?v=24"></script>
+    <script src="js-ambiente/70-faixa.js?v=24"></script>
+    <script src="js-ambiente/85-treino.js?v=24"></script>
+    <script src="js-ambiente/90-estudo.js?v=24"></script>
   </body>
 </html>

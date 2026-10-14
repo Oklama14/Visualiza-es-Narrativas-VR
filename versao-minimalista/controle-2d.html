@@ -18,6 +18,8 @@
                 indicadores do contexto em foco - no ano em que a pessoa esta
     contexto .. as tres anotacoes narrativas (manchete, leitura, contexto)
     regua ..... a linha do tempo (o equivalente da faixa no piso)
+  O palco repete a sala: o painel em cima da mesa e a zona de contexto a
+  direita.
   A regra que transforma a rolagem em ano e a MESMA da faixa (anoNaFaixa, em
   js-ambiente/00-planta.js), com a mesma folga nas fronteiras. Toda frase vem
   de js-ambiente/04-narrativa.js e as tarefas de js-ambiente/07-tarefas.js -
@@ -47,6 +49,13 @@
   .passo.atual .cartao { color:#fff; background:#122039; }
   .passo.passado .cartao { color:#cfe0f4; border-left-color:#2c4a6e; }
   .palco { position:sticky; top:0; height:100vh; padding:10px 0; display:flex; flex-direction:column; gap:10px; min-height:0; }
+  /* Palco como a sala: o painel em cima da mesa, a zona de contexto a direita
+     ocupando a altura toda (o texto e o que mais cresce). Assim tudo cabe numa
+     tela de notebook (1280 x 650 uteis) sem rolagem interna nem nada cortado. */
+  .palco-corpo { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:minmax(0,2.3fr) minmax(250px,1fr); gap:10px; }
+  .coluna-esq { min-height:0; display:flex; flex-direction:column; gap:10px; }
+  .coluna-esq > .card[data-secao="mesa"] { flex:1 1 auto; min-height:0; overflow:auto; }
+  .palco-corpo > aside.card { min-height:0; overflow:auto; }
 
   .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 14px; }
   .camada { color:#7e92b4; font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; margin:0 0 6px; }
@@ -60,24 +69,22 @@
   .painel-manchete { color:#c6d4ea; margin:0 0 4px; }
   .painel-ano { text-align:right; flex:none; }
   .painel-ano .grande { font-size:2.1rem; font-weight:800; line-height:1; }
-  .painel-ano .evento { color:#ffd166; font-size:.82rem; min-height:1.1em; }
+  .painel-ano .evento { color:#ffd166; font-size:.82rem; min-height:1.1em; margin-top:4px; }
   .fechar { background:#1a2436; color:#cfe0f4; border:1px solid var(--border); border-radius:50%; width:30px; height:30px; cursor:pointer; font:inherit; margin-left:8px; }
   .fechar[hidden] { display:none; }
   .painel-corpo { display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:14px; align-items:start; }
   canvas { width:100%; display:block; }
   .readout { font-weight:700; margin-top:2px; white-space:pre; }
-  .parede-titulo { color:#7e92b4; font-size:.72rem; letter-spacing:.05em; text-align:center; }
-  .parede .grade { max-width:150px; margin:4px auto; }
-  .parede p { margin:1px 0; text-align:center; font-size:.8rem; white-space:pre; }
+  .parede-titulo { color:#7e92b4; font-size:.66rem; letter-spacing:.04em; text-align:center; white-space:nowrap; }
+  .parede .grade { max-width:100px; margin:4px auto; }
+  .parede p { margin:0; text-align:center; font-size:.76rem; line-height:1.35; white-space:pre; }
 
-  /* Mesa e contexto, lado a lado */
-  .baixo { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:10px; }
-  .baixo > .card { overflow:auto; }
+  /* Mesa */
   .mesa-titulo { color:#6fa8e6; font-weight:600; letter-spacing:.04em; margin:0 0 6px; white-space:pre; font-size:.85rem; }
   .mesa-corpo { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:10px; }
   .mapa { display:grid; grid-template-columns:1fr 1fr; grid-template-areas:"norte nordeste" "centro-oeste sudeste" "sul ."; gap:6px; }
-  .regiao { display:flex; gap:8px; align-items:center; border:1px solid rgba(29,158,117,.45); background:#0f2a24; border-radius:7px; padding:6px; cursor:pointer; outline:none; }
-  .regiao .grade { width:56px; flex:none; margin:0; gap:1px; }
+  .regiao { display:flex; gap:8px; align-items:center; border:1px solid rgba(29,158,117,.45); background:#0f2a24; border-radius:7px; padding:5px 6px; cursor:pointer; outline:none; }
+  .regiao .grade { width:52px; flex:none; margin:0; gap:1px; }
   .regiao.foco { border-color:#7fd4ff; background:#123a33; }
   .regiao.aberta { border-color:var(--foco); background:#3b2a12; }
   .regiao .nome { font-size:.68rem; letter-spacing:.05em; color:var(--muted); }
@@ -104,7 +111,10 @@
 
   .nota { color:var(--muted); font-size:.78rem; }
   .rodape { max-width:1320px; margin:0 auto; padding:0 18px 40px; }
-  #legenda { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:20; display:none; max-width:min(760px, 92vw); background:#000d; border:1px solid #7b61ff; color:#fff; font-weight:600; padding:10px 14px; border-radius:8px; }
+  /* Legenda (tarefa, avisos): dentro do cabecalho do painel, no espaco entre
+     o titulo e o ano - ocupa lugar proprio e nunca cobre nada. (Fixa no topo
+     da janela, ela ficava por cima da borda e do cabecalho do painel.) */
+  #legenda { display:none; flex:1 1 auto; align-self:center; margin:0 6px; background:#000d; border:1px solid #7b61ff; color:#fff; font-weight:600; padding:8px 12px; border-radius:8px; text-align:center; }
   #legenda.visivel { display:block; }
   #studyPanel2d { position:fixed; right:14px; top:14px; z-index:30; width:250px; padding:12px 14px; background:rgba(8,13,24,.95); border:1px solid var(--border); border-left:3px solid #7b61ff; border-radius:10px; font-size:13px; }
   #studyPanel2d button { display:block; width:100%; margin-top:6px; padding:7px 10px; border-radius:7px; cursor:pointer; background:rgba(255,255,255,.08); color:#dfe9f6; border:1px solid rgba(255,255,255,.18); font:inherit; }
@@ -112,7 +122,8 @@
   @media (max-width: 900px) {
     .historia { grid-template-columns:84px minmax(0,1fr); gap:8px; }
     .passo .ano { font-size:1.1rem; }
-    .baixo, .mesa-corpo { grid-template-columns:1fr; }
+    .palco-corpo, .mesa-corpo { grid-template-columns:1fr; }
+    .palco { overflow:auto; }
     .painel-corpo { grid-template-columns:1fr; }
   }
 </style>
@@ -125,12 +136,12 @@
   <p class="instrucao" id="instrucao">Role a página: cada passo é um ano. Passe o mouse sobre uma região para pô-la em foco; clique para abrir a visualização dela.</p>
 </header>
 
-<div id="legenda" role="status" aria-live="polite"></div>
-
 <main class="historia">
   <div class="trilha" id="trilha" data-secao="trilha" aria-label="Linha do tempo: role para avançar"></div>
 
   <div class="palco" id="palco">
+   <div class="palco-corpo">
+    <div class="coluna-esq">
     <section class="card painel" data-secao="painel" id="painel" aria-label="Visualização">
       <div class="painel-topo" id="painelTopo"></div>
       <div class="painel-cab">
@@ -139,7 +150,8 @@
           <div class="painel-titulo" id="painelTitulo"></div>
           <p class="painel-manchete" id="painelManchete"></p>
         </div>
-        <div style="display:flex;align-items:flex-start">
+        <div id="legenda" role="status" aria-live="polite"></div>
+        <div style="display:flex;align-items:flex-start;flex:none">
           <div class="painel-ano">
             <div class="grande" id="painelAno"></div>
             <div class="evento" id="painelEvento"></div>
@@ -163,7 +175,6 @@
       </div>
     </section>
 
-    <div class="baixo">
       <section class="card" data-secao="mesa" aria-label="Camada de dados brutos">
         <p class="camada">Camada de dados brutos · o mapa</p>
         <p class="mesa-titulo" id="mesaValorTitulo"></p>
@@ -172,11 +183,12 @@
           <div class="colunas" id="colunas"></div>
         </div>
       </section>
+    </div>
       <aside class="card" data-secao="contexto" aria-label="Camada textual">
         <p class="camada">Camada textual · anotações narrativas</p>
         <div id="contextoSlabs"></div>
       </aside>
-    </div>
+   </div>
 
     <div class="regua" id="regua" data-secao="regua" aria-hidden="true"></div>
   </div>
@@ -188,11 +200,11 @@
 
 <!-- Os mesmos modulos da condicao imersiva (sem nada de A-Frame). 00-planta
      traz a regra do ano da linha do tempo (anoNaFaixa). -->
-<script src="js-ambiente/00-planta.js?v=23"></script>
-<script src="js-ambiente/01-telemetria.js?v=23" data-condicao="2d"></script>
-<script src="js-ambiente/02-base.js?v=23"></script>
-<script src="js-ambiente/04-narrativa.js?v=23"></script>
-<script src="js-ambiente/07-tarefas.js?v=23"></script>
+<script src="js-ambiente/00-planta.js?v=24"></script>
+<script src="js-ambiente/01-telemetria.js?v=24" data-condicao="2d"></script>
+<script src="js-ambiente/02-base.js?v=24"></script>
+<script src="js-ambiente/04-narrativa.js?v=24"></script>
+<script src="js-ambiente/07-tarefas.js?v=24"></script>
 <script>
 (function () {
   "use strict";
@@ -434,7 +446,7 @@
     // Canvas no tamanho real da tela; a altura cabe no palco fixo.
     const dpr = window.devicePixelRatio || 1;
     const W = Math.max(300, cv.clientWidth || 640);
-    const H = Math.round(Math.max(150, Math.min(W * 0.42, window.innerHeight * 0.27)));
+    const H = Math.round(Math.max(140, Math.min(W * 0.42, window.innerHeight * 0.25)));
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
     cv.style.height = H + "px";
     const g = cv.getContext("2d");
@@ -442,7 +454,9 @@
     const serie = ctx.series[state.indicadorKey];
     const anos = DADOS.anos;
     const idx = state.anoIdx;
-    const ML = 36, MR = 12, MT = 22, MB = 22;
+    // ML/MB com folga: o anel do ano atual (raio 10) encostava no "50" e no
+    // "0" do eixo e nos rotulos dos anos.
+    const ML = 46, MR = 12, MT = 22, MB = 26;
     const X = (i) => ML + (i / (anos.length - 1)) * (W - ML - MR);
     const Y = (v) => H - MB - (v / 100) * (H - MT - MB);
     g.clearRect(0, 0, W, H);
@@ -450,7 +464,7 @@
     [0, 25, 50, 75, 100].forEach((p) => {
       g.strokeStyle = p === 0 ? "rgba(143,166,200,.4)" : "rgba(143,166,200,.14)";
       g.beginPath(); g.moveTo(ML, Y(p)); g.lineTo(W - MR, Y(p)); g.stroke();
-      g.fillStyle = "#7e92b4"; g.textAlign = "right"; g.fillText(String(p), ML - 8, Y(p) + 4);
+      g.fillStyle = "#7e92b4"; g.textAlign = "right"; g.fillText(String(p), ML - 14, Y(p) + 4);
     });
     g.textAlign = "center";
     anos.forEach((ano, i) => { g.fillStyle = i === idx ? "#ffffff" : "#7e92b4"; g.fillText(String(ano).slice(2), X(i), H - 5); });
@@ -480,21 +494,30 @@
     });
 
     // O desfecho: so quando a historia chega ao fim (calloutsDaSerie devolve
-    // [] antes disso - a mesma regra do painel 3D).
+    // [] antes disso - a mesma regra do painel 3D). O lugar de cada cartao vem
+    // de posicionarCartoes (04-narrativa.js), o mesmo do painel 3D: longe da
+    // linha, dos pontos, da referencia e do outro cartao, dentro do grafico.
     const cards = calloutsDaSerie(ctx, state.indicadorKey, idx);
+    // 124 x 34 com letra de 12 px: com 132 x 40 nao havia lugar livre nos
+    // graficos baixos (notebook) e o cartao cobria a referencia nacional.
+    const w = 124, h = 34;
+    const lugares = posicionarCartoes(cards, serie, {
+      X, Y, w, h, folga: 22 + h / 2, raio: 11, margem: 2,
+      xMin: ML + 2, xMax: W - MR, yMin: MT, yMax: H - MB,
+      cima: -1,
+      ref: ctx.tipo !== "brasil" ? DADOS.brasil.series[state.indicadorKey] : null,
+    });
     cards.forEach((c, k) => {
       const cor = c.tipo === "critico" ? "#ff9f6b" : "#7fd4ff";
-      const w = 132, h = 40;
-      const colide = k > 0 && Math.abs(X(c.idx) - X(cards[0].idx)) < w + 10;
-      const y = serie[c.idx];
-      let cy = colide ? Y(y) + 22 : Y(y) - 22 - h;
-      cy = Math.max(MT, Math.min(H - MB - h, cy));
-      const cx = Math.max(ML, Math.min(W - MR - w, X(c.idx) - w / 2));
+      const cx = lugares[k].x - w / 2;
+      const cy = lugares[k].y - h / 2;
       g.fillStyle = "#081022"; g.fillRect(cx, cy, w, h);
       g.fillStyle = cor; g.fillRect(cx, cy, w, 3);
-      g.fillStyle = cor; g.fillText(c.rotulo, cx + w / 2, cy + 18);
-      g.fillStyle = "#eaf2ff"; g.fillText(c.valor, cx + w / 2, cy + 34);
+      g.font = "12px Inter, sans-serif";
+      g.fillStyle = cor; g.fillText(c.rotulo, cx + w / 2, cy + 16);
+      g.fillStyle = "#eaf2ff"; g.fillText(c.valor, cx + w / 2, cy + 29);
     });
+    g.font = "13px Inter, sans-serif";
     cv.dataset.callouts = JSON.stringify(cards.map((c) => [c.rotulo, c.valor]));
   }
 

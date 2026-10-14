@@ -5,8 +5,9 @@ Reconstrução da versão minimalista conforme a planta baixa
 entrou **um ambiente único**, com as três camadas do desenho ocupando lugares
 distintos da sala, e o alvo de execução é o **Meta Quest 2 com hand tracking**.
 
-Versão atual: **piloto-v1** — *strollytelling*: uma linha do tempo no piso, e o
-corpo faz a história andar (o que mudou desde a v0 está em `CHANGELOG.md`).
+Versão atual: **piloto-v1.1** — *strollytelling*: uma linha do tempo no piso, e
+o corpo faz a história andar; na v1.1, nada fica em cima de nada (o que mudou
+em cada versão está em `CHANGELOG.md`).
 
 ```
                    [ PAINEL EMERGENTE ]        ← "a visualização surge acima"
@@ -233,6 +234,7 @@ node tests/quest-sim.js              # Quest 2 emulado (precisa de playwright + 
 node tests/quest-sim.js --shot visao-quest.png
 node tests/paridade-2d.js            # 2D x imersiva: o mesmo texto nos dois (playwright)
 node tests/estudo-sim.js             # ensaio do estudo ponta a ponta (playwright + iwer)
+node tests/sobreposicao.js           # nada em cima de nada, nas duas condicoes (playwright)
 ```
 
 Para os quatro últimos: `npm i -D playwright iwer` uma vez (o `quest-sim` e o
@@ -268,6 +270,17 @@ restaura a âncora, fechar volta ao Brasil. Varre **160 combinações** (5 regi�
 continua vivo no fim — e confere no layout real que nenhum rótulo de linha
 única quebrou (contar caracteres não basta: letra larga em caixa alta quebra
 antes do `wrap-count`).
+
+O `sobreposicao` procura qualquer coisa em cima de outra: na imersiva, em
+todas as 192 combinações de contexto × indicador × ano e nas 3 etapas do
+treino, cada texto, cartão e placa contra o que está na mesma superfície (texto
+sobre texto, texto sobre blocos, texto saindo do próprio fundo, cartão cobrindo
+a linha ou um ponto); e, de cada um dos 8 anos da faixa, raios do olho até
+cada texto e além dele: nenhum texto pode ficar desenhado em cima de um objeto
+logo atrás (o rótulo deitado sobre a quina de uma base, por exemplo), o painel
+nunca pode ficar tapado e um rótulo da mesa, no máximo um terço. Na 2D, em 7 tamanhos de janela (de 1920 × 1080 até 1280 × 650) e com a
+pergunta da tarefa na tela: retângulos de texto, caixas que não cabem no palco
+e o desenho do gráfico (rótulos, cartões, pontos e linhas).
 
 O `quest-sim` é o teste do headset: com o **IWER** (Immersive Web Emulation
 Runtime, da Meta) configurado como Meta Quest 2 e a internet bloqueada, a cena
@@ -319,6 +332,7 @@ assets/maos/                  modelo das mãos (WebXR Input Profiles, MIT)
 tests/quest-sim.js            simulação do Quest 2 (IWER)
 tests/paridade-2d.js          2D x imersiva: mesmo texto
 tests/estudo-sim.js           ensaio do estudo ponta a ponta
+tests/sobreposicao.js         nada em cima de nada (imersiva e 2D)
 CHANGELOG.md                  o que mudou entre as versões do artefato
 ```
 
@@ -408,6 +422,6 @@ não confirma mais: a mão descansa nele segurando o controle.
 1. **`dados.json` é ASCII** (`"Taxa de Evasao"`). A camada de exibição corrige
    os 4 rótulos conhecidos (`ACENTOS`, em `02-base.js`). Se o `build-dados.js`
    passar a gerar acentuado, esse mapa vira identidade e pode sair.
-2. **O `?v=23`** nos `<script>` e no `<link>` é cache-busting. Com o
+2. **O `?v=24`** nos `<script>` e no `<link>` é cache-busting. Com o
    `node server.js` atual (que manda `no-store`) não precisa mais subir o número;
    só vale se você servir por outro servidor (ex.: `python -m http.server`).

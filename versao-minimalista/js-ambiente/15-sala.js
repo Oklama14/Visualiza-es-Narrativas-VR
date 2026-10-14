@@ -106,14 +106,16 @@ function buildSala() {
   buildZonas();
 }
 
-// Placa da parede do fundo, na altura dos olhos e logo acima da mesa.
-// Nao esta na planta (uma vista de cima nao mostra parede), mas repete a
-// legenda do proprio desenho: o nome do ambiente e as 3 acoes do leitor. E o
-// que da assunto a primeira olhada de quem acabou de entrar - sem ela, a porta
-// se abre para uma parede vazia, porque o mapa fica abaixo da linha do olhar.
+// Placa com o nome do ambiente e as acoes do leitor. Nao esta na planta (uma
+// vista de cima nao mostra parede). Na v0 ela ficava na parede do fundo, para
+// quem entrava pela porta; na v1 o painel fica sempre a vista e, da linha do
+// tempo, cobre a parede do fundo inteira - a placa aparecia cortada pela borda
+// dele. Agora ela fica na parede da ESQUERDA, ao lado de 2017 (onde a pessoa
+// comeca), virada para a sala: nada fica na frente dela.
 function buildPlacaSala(raiz) {
-  const z = round2(-PLANTA.sala.d / 2 + 0.04);
-  const g = el("a-entity", { position: `${PLANTA.mapa.cx} 1.78 ${z}` });
+  const x = round2(-PLANTA.sala.w / 2 + 0.04);
+  const z = round2(PLANTA.faixa.z - 1.2);
+  const g = el("a-entity", { position: `${x} 1.7 ${z}`, rotation: "0 90 0" });
 
   g.appendChild(
     el("a-plane", {
@@ -250,14 +252,17 @@ function posicionarPlanta() {
 
   dom.regioes.setAttribute("position", `0 ${round2(PLANTA.mapa.topo + 0.004)} 0`);
   dom.colunas.setAttribute("position", `0 ${PLANTA.mapa.topo} 0`);
-  dom.mesaValorTitulo.setAttribute("position", `0 ${round2(PLANTA.mapa.topo + 0.1)} ${round2(-PLANTA.mapa.d / 2 - 0.04)}`);
+  // Titulo da mesa na beira de la, baixo (6 cm acima do tampo): da linha do
+  // tempo ele aparece por baixo do painel. A 10 cm, a borda do painel o cortava.
+  dom.mesaValorTitulo.setAttribute("position", `0 ${round2(PLANTA.mapa.topo + 0.06)} ${round2(-PLANTA.mapa.d / 2 - 0.04)}`);
   // Botao de som na BORDA da mesa, do lado da faixa, inclinado para quem esta
   // nela (os filhos ja deitam a -90; +35 aqui = placa a -55 graus). Na v0 ele
   // ficava na linha das colunas, e da linha do tempo a coluna de Retencao o
-  // tapava do olhar.
+  // tapava do olhar. 6 cm alem da beira: o halo da coluna de Retencao (quando
+  // ela e o indicador ativo) encostava nele.
   dom.somBtn.setAttribute(
     "position",
-    `${round2(PLANTA.mapa.w / 2 - 0.22)} ${round2(PLANTA.mapa.topo + 0.03)} ${round2(PLANTA.mapa.d / 2 + 0.02)}`
+    `${round2(PLANTA.mapa.w / 2 - 0.176)} ${round2(PLANTA.mapa.topo + 0.03)} ${round2(PLANTA.mapa.d / 2 + 0.06)}`
   );
   dom.somBtn.setAttribute("rotation", "35 0 0");
 

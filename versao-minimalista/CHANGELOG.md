@@ -4,6 +4,73 @@ A versão vai gravada em cada sessão do estudo (`VERSAO_ARTEFATO`, em
 `js-ambiente/01-telemetria.js`; evento `versao` e coluna `versao_artefato` da
 análise). Cada versão usada com participantes tem uma tag no repositório.
 
+## piloto-v1.1 — nada em cima de nada (2026-10-14)
+
+Revisão de sobreposições. Um teste novo (`tests/sobreposicao.js`) varre as 192
+combinações da imersiva (contexto × indicador × ano) na mesma superfície e do
+ponto de vista de cada um dos 8 anos da faixa (texto tapado por um objeto à
+frente e texto desenhado em cima de um objeto logo atrás), o treino e a 2D em
+7 tamanhos de janela. O que ele achou na piloto-v1 e foi corrigido:
+
+**Imersiva**
+
+- **Nome e valor das regiões ficavam em cima dos blocos** (e o valor, atrás da
+  placa, era tapado por ela, visto da faixa). Agora os dois ficam numa faixa
+  própria de 13,5 cm entre a placa e a borda de quem olha, o nome a 4,5 cm da
+  fileira da frente (mais perto, vista da faixa, a fileira encostava nas
+  letras); nas regiões rasas (Sul, Sudeste) a placa recua 5,5 cm para caber.
+- **Rótulos das colunas de indicador caíam em cima das regiões de trás.** Eles
+  ficavam de pé no alto das colunas (até 1,2 m); agora ficam deitados na frente
+  da base, dentro da face do tampo. As colunas ficaram mais baixas (22 cm, eram
+  28), paralelas à faixa e com a base fina e rasa (8 mm × 5 cm: mais alta, a
+  quina dela ficava por baixo do nome deitado, verde sobre verde); o halo do
+  indicador ativo cobre a coluna e os rótulos.
+- **De 2022 a 2024, a coluna de Eficiência tapava o nome e o valor do Sul** —
+  justamente a resposta da T2. As colunas agora deixam uma janela na frente do
+  Sul (`COLUNAS.xs`), e o logic-check confere de cada ano da faixa que nenhuma
+  coluna fica entre o olho e o rótulo de uma região (`G10`).
+- **Cartões de pior/melhor ano** saíam do gráfico (sobre os números do eixo e
+  até para fora do painel) e cobriam a linha e os pontos. Agora um único
+  posicionador, compartilhado com a 2D (`posicionarCartoes`, em
+  `04-narrativa.js`), escolhe o lugar livre mais perto do ponto, dentro do
+  gráfico, com folga para a espessura das linhas; qualquer pedaço de linha sob
+  o cartão custa mais que pôr o cartão do outro lado. O cartão ficou 1 cm mais
+  alto (o valor encostava na borda).
+- **"2020 · Pandemia"** ficava em cima da linha nos indicadores de valor baixo
+  (retenção). Agora fica acima do gráfico, como na 2D.
+- **O "50" do eixo** encostava no anel do ano atual em 2017; os números do eixo
+  se afastaram 2 cm.
+- **Título da mesa** cortado pela borda de baixo do painel: o título desceu
+  4 cm e o painel subiu 6 cm (elevação ainda entre −11° e +29°).
+- **Placa da sala** ficava atrás do painel (que agora está sempre à vista):
+  foi para a parede da esquerda, ao lado de 2017.
+- **"< PASSADO" e "FUTURO >"** formavam uma linha só com o rótulo "CAMADA DE
+  DADOS BRUTOS" do piso; agora ficam nas pontas da faixa, na linha dela. O
+  disco de volta foi 20 cm para a direita.
+- **Botão de som** 6 cm para fora da beira da mesa: o halo da coluna de
+  Retenção encostava nele.
+
+**2D**
+
+- **A pergunta da tarefa ficava por cima do painel** (fixa no topo da janela).
+  Agora ela entra no cabeçalho do painel, entre o título e o ano.
+- **Conteúdo cortado em telas de notebook** (o texto do contexto precisava de
+  rolagem interna em 1366 × 768). O palco agora repete a sala: painel em cima
+  da mesa e a zona de contexto à direita, na altura toda. Cabe sem nada
+  escondido de 1920 × 1080 até 1280 × 650.
+- **Cartões do gráfico** pelo mesmo posicionador da imersiva e um pouco menores
+  (124 × 34 px, letra de 12 px): nos gráficos baixos de notebook não havia
+  lugar livre e o cartão cobria a referência nacional. Margens do gráfico
+  maiores (o anel do ano atual encostava no "50", no "0" e nos anos).
+- O ano grande e o evento do painel não se tocam mais.
+
+**O que fica, de propósito** (visto de algum ponto da faixa, não é defeito de
+layout): o rótulo de piso "CAMADA TEXTUAL · ANOTAÇÕES NARRATIVAS" some atrás
+da mesa para quem está do lado de 2017 (a mesa é sólida; ele aparece a partir
+de 2021), e o fio que liga a região aberta ao painel cruza, de alguns pontos,
+o nome ou o valor de uma região de trás — ele ficou mais fino (7 mm) e mais
+translúcido, para o texto continuar legível através dele.
+
 ## piloto-v1 — strollytelling (2026-10-14)
 
 A escolha do conselho: **uma linha do tempo enxuta no piso**. O corpo faz a

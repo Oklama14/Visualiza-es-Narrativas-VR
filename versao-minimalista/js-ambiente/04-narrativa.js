@@ -222,6 +222,93 @@ function calloutsDaSerie(ctx, key, ateIdx) {
   return lista;
 }
 
+// Onde por os cartoes do desfecho (pior/melhor ano) sem cobrir a linha, os
+// pontos, a referencia nacional nem o outro cartao, e sem sair da area do
+// grafico. Vale para as duas condicoes: quem chama passa X(i) e Y(v) e as
+// medidas nas suas unidades (metros no painel 3D, pixels no canvas da 2D).
+//   cfg: { X, Y, w, h, folga (do ponto ao centro do cartao), raio (dos
+//          pontos), margem (meia espessura das linhas + respiro),
+//          xMin, xMax, yMin, yMax (limites das BORDAS do cartao),
+//          cima (+1 se y cresce para cima, como no 3D; -1 no canvas),
+//          ref (serie de referencia, opcional) }
+// Devolve, na ordem dos cartoes, o centro { x, y } de cada um.
+function posicionarCartoes(cartoes, serie, cfg) {
+  const pontosDe = (s) => (s || []).map((v, i) => (v == null ? null : { x: cfg.X(i), y: cfg.Y(v), i })).filter(Boolean);
+  const segmentosDe = (pts) => pts.slice(1).map((p, k) => [pts[k], p]);
+  const pts = pontosDe(serie);
+  const linha = segmentosDe(pts);
+  const ref = segmentosDe(pontosDe(cfg.ref));
+  const validos = serie.filter((v) => v != null);
+  const maior = Math.max(...validos);
+  const lim = (v, a, b) => Math.max(a, Math.min(b, v));
+  // comprimento de um segmento dentro de um retangulo (Liang-Barsky)
+  const dentro = (s, r) => {
+    const [a, b] = s;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    let t0 = 0, t1 = 1;
+    const p = [-dx, dx, -dy, dy];
+    const q = [a.x - r[0], r[2] - a.x, a.y - r[1], r[3] - a.y];
+    for (let k = 0; k < 4; k += 1) {
+      if (p[k] === 0) {
+        if (q[k] < 0) return 0;
+      } else {
+        const t = q[k] / p[k];
+        if (p[k] < 0) t0 = Math.max(t0, t);
+        else t1 = Math.min(t1, t);
+      }
+    }
+    return t1 > t0 ? (t1 - t0) * Math.hypot(dx, dy) : 0;
+  };
+  const tocaPonto = (p, r) => {
+    const cx = lim(p.x, r[0], r[2]), cy = lim(p.y, r[1], r[3]);
+    return Math.hypot(p.x - cx, p.y - cy) < cfg.raio;
+  };
+  const cruza = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const colocados = [];
+  return cartoes.map((c) => {
+    const px = cfg.X(c.idx);
+    const py = cfg.Y(serie[c.idx]);
+    // o maior valor prefere ficar acima do ponto; o menor, abaixo
+    const pref = serie[c.idx] >= maior ? 1 : -1;
+    let melhor = null;
+    [pref, -pref].forEach((lado) => [1, 1.7, 2.4].forEach((longe) => {
+      [0, -0.3, 0.3, -0.6, 0.6, -1, 1].forEach((f) => {
+        const x = lim(px + f * cfg.w, cfg.xMin + cfg.w / 2, cfg.xMax - cfg.w / 2);
+        const yIdeal = py + cfg.cima * lado * cfg.folga * longe;
+        const y = lim(yIdeal, cfg.yMin + cfg.h / 2, cfg.yMax - cfg.h / 2);
+        const r = [x - cfg.w / 2, y - cfg.h / 2, x + cfg.w / 2, y + cfg.h / 2];
+        // a linha tem espessura: o cartao precisa de folga em volta dela
+        const m = cfg.margem || 0;
+        const rm = [r[0] - m, r[1] - m, r[2] + m, r[3] + m];
+        let custo = 0;
+        // Qualquer pedaco de linha sob o cartao custa mais que as preferencias
+        // de lado e de distancia (o cartao so cobre linha se nao houver outro
+        // lugar): com custo so proporcional ao comprimento, 9 px da referencia
+        // nacional saiam mais baratos que colocar o cartao do outro lado.
+        linha.forEach((sg) => {
+          const d = dentro(sg, rm);
+          if (d > 0) custo += 2 + (4 * d) / cfg.w;
+        });
+        ref.forEach((sg) => {
+          const d = dentro(sg, rm);
+          if (d > 0) custo += 1.5 + (2.5 * d) / cfg.w;
+        });
+        pts.forEach((p) => {
+          if (tocaPonto(p, rm)) custo += p.i === c.idx ? 10 : 5;
+        });
+        colocados.forEach((o) => {
+          if (cruza(o, r)) custo += 50;
+        });
+        // perto do proprio ponto (o cartao nao tem fio ate ele)
+        custo += (0.6 * Math.abs(x - px)) / cfg.w + (0.3 * Math.abs(y - yIdeal)) / cfg.h + (lado !== pref ? 0.25 : 0) + (longe - 1) * 0.4;
+        if (!melhor || custo < melhor.custo - 1e-9) melhor = { x, y, r, custo };
+      });
+    }));
+    colocados.push(melhor.r);
+    return { x: melhor.x, y: melhor.y };
+  });
+}
+
 function textoLeituraAno(ctx, key, idx) {
   const v = ctx.series[key][idx];
   return v == null ? `${DADOS.anos[idx]}  ·  sem dados` : `${DADOS.anos[idx]}   ${fmt(v)}%`;
@@ -277,5 +364,5 @@ function rotuloEvento(ev) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { computeNarrative, anotacoes, composicaoDoAno, ultimoAnoComComposicao, rotulosCallout, reparte100,
     calloutsDaSerie, textoLeituraAno, textosParede, tituloMesa, textoValorRegiao, rotuloCurtoIndicador, rotuloEvento, blocosPara, TEXTO_PAINEL_KICKER,
-    kickerPainel, valorNoAno, textoAnoPainel, textoEventoAno };
+    kickerPainel, valorNoAno, textoAnoPainel, textoEventoAno, posicionarCartoes };
 }

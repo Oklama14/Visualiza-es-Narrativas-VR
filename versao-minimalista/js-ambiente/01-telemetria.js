@@ -40,7 +40,7 @@
 
   // Versao do artefato que vai junto de CADA sessao. Suba quando o artefato
   // mudar (piloto-v0 -> estudo-v1): a analise separa as sessoes por ela.
-  const VERSAO_ARTEFATO = "piloto-v1";
+  const VERSAO_ARTEFATO = "piloto-v1.1";
 
   const sessao = novaSessao();
   const eventos = []; // tudo o que foi coletado (para o download)

@@ -80,10 +80,11 @@ const PLANTA = {
     cz: _cz(PLANTA_SVG.mapa), // fica SOBRE o mapa, nao atras dele
     w: 2.9,
     h: 1.4,
-    // Borda de baixo. Com olhos a 1,60 m e o painel a ~2,05 m de distancia, a
-    // faixa 1,18-2,58 m cai entre -12 e +26 graus de elevacao: leitura sem
-    // esticar o pescoco, que e o que mata uma sessao longa de Quest 2.
-    baseY: 1.18,
+    // Borda de baixo. Com olhos a 1,60 m e o painel a ~1,9 m da faixa, a
+    // faixa 1,24-2,64 m cai entre -11 e +29 graus de elevacao: leitura sem
+    // esticar o pescoco, que e o que mata uma sessao longa de Quest 2. (Era
+    // 1,18: a borda de baixo cortava o titulo da mesa, na beira de la.)
+    baseY: 1.24,
     subidaDe: 0.92, // altura de onde o painel comeca a subir (logo acima da mesa)
   },
 
@@ -138,8 +139,9 @@ PLANTA.usuario = { x: PLANTA.faixa.cx, z: PLANTA.faixa.z };
 // Disco de volta para a linha do tempo. Ele so RESTAURA a ancora (70-faixa.js):
 // a pessoa reaparece sobre o ano em que o corpo dela esta, nao no disco - entao
 // o lugar dele so precisa ser facil de mirar de onde se sai da faixa (a zona
-// de contexto, a 1,5 m) e ficar fora do caminho: meio metro alem de 2024.
-PLANTA.discoFaixa = { x: _r2(PLANTA.faixa.x1 + 0.5), z: PLANTA.faixa.z };
+// de contexto, a 1,3 m) e ficar fora do caminho: alem de 2024 e do rotulo
+// "FUTURO >", que fica na ponta da faixa.
+PLANTA.discoFaixa = { x: _r2(PLANTA.faixa.x1 + 0.7), z: PLANTA.faixa.z };
 
 // Ano (indice 0..anos-1) para a cabeca em (x, z), dado o ano atual.
 // - fora do corredor da faixa: devolve `atual` (o ano trava);
@@ -199,16 +201,26 @@ const REGIOES_MESA = REGIOES_IMG.map((r) => ({
 
 // Placa de 100 blocos por regiao (1 bloco = 1%), deitada no tampo. O passo e
 // pequeno o bastante para caber na menor regiao do desenho (Sul).
-const PLACA = { cols: 10, gap: 0.032, size: 0.024 };
+// faixaRotulos: a faixa entre a placa de blocos e a borda de quem olha, onde
+// ficam o nome e o valor da regiao (20-mapa.js).
+const PLACA = { cols: 10, gap: 0.032, size: 0.024, faixaRotulos: 0.135 };
 
 // Os 4 indicadores como colunas de voxel em pe na borda PROXIMA do tampo:
 // a camada de dados brutos ao alcance da mao, longe de ocluir o mapa.
+// (piloto-v1) Mais baixas (22 cm, eram 28) e com o nome e o valor DEITADOS na
+// frente da base: de pe, em cima delas, os rotulos subiam ate 1,2 m e, vistos
+// da linha do tempo, caiam em cima das regioes de tras (Sudeste, Sul).
+// As quatro deixam uma JANELA na frente do Sul (a regiao mais perto da
+// faixa): com o passo regular (-1,05 ... 1,05), de 2024 a coluna de
+// Eficiencia ficava entre o olho e o nome/valor do Sul - justamente a resposta
+// da T2. Nenhuma coluna fica na faixa de x por onde passam as visadas da linha
+// do tempo ate o rotulo do Sul (o logic-check confere, G10).
 const COLUNAS = {
-  z: _r2(PLANTA.mapa.d / 2 - 0.13), // local a mesa
-  xs: [-1.05, -0.35, 0.35, 1.05],
+  z: _r2(PLANTA.mapa.d / 2 - 0.16), // local a mesa (16 cm: os rotulos deitados cabem na face do tampo)
+  xs: [-1.15, -0.5, 0.68, 1.13],
   cols: 10,
-  gap: 0.028,
-  size: 0.023,
+  gap: 0.021,
+  size: 0.017,
   y0: 0.02, // acima do tampo
 };
 

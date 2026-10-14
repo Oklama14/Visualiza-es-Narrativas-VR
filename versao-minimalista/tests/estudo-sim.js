@@ -391,7 +391,7 @@ const SSQ_POS = { 1: 1, 2: 1, 3: 0, 4: 2, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 1, 1
   const anosPos = daSessaoVR.filter((l) => l.tipo === "ano" && l.via === "posicao");
   registra(
     "E15",
-    anosPos.length >= 7 && anosPos.every((l) => typeof l.x === "number" && typeof l.z === "number" && l.de !== undefined) && pos && "ano" in pos && versao && versao.artefato === "piloto-v1",
+    anosPos.length >= 7 && anosPos.every((l) => typeof l.x === "number" && typeof l.z === "number" && l.de !== undefined) && pos && "ano" in pos && versao && versao.artefato === "piloto-v1.1",
     `${anosPos.length} trocas de ano pelo corpo gravadas (via "posicao", com x/z da cabeca e o ano de onde veio); artefato ${versao ? versao.artefato : "?"}`
   );
 

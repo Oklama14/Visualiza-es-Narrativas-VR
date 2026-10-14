@@ -53,8 +53,17 @@ function buildRegioes() {
     });
     grupo.appendChild(halo);
 
-    // Placa de 100 blocos deitada: 1 bloco = 1% do indicador ativo em 2024.
-    const voxHost = el("a-entity", { position: "0 0.028 0" });
+    // Placa de 100 blocos deitada: 1 bloco = 1% do indicador ativo no ano.
+    // Nome e valor ficam numa faixa PROPRIA entre a placa e a borda de quem
+    // olha (13,5 cm): nas regioes rasas
+    // (Sul, Sudeste) a placa recua um pouco para caber. Antes eles ficavam em
+    // cima dos blocos - e o valor, atras da placa, era tapado pelos proprios
+    // blocos. O nome fica 4,5 cm a frente da placa: mais perto, vista da faixa,
+    // a fileira da frente (2,4 cm de altura) encostava nas letras.
+    const meiaPlaca = ((PLACA.cols - 1) * PLACA.gap + PLACA.size) / 2;
+    const placaZ = round2(Math.min(0, r.d / 2 - PLACA.faixaRotulos - meiaPlaca));
+    const pertoPlaca = placaZ + meiaPlaca;
+    const voxHost = el("a-entity", { position: `0 0.028 ${placaZ}` });
     grupo.appendChild(voxHost);
     const handle = createVoxelGrid({
       count: PLACA.cols * PLACA.cols,
@@ -73,7 +82,7 @@ function buildRegioes() {
     // tamanho da letra depende apenas de M_CHAR.mesa.
     const rotulo = el("a-text", Object.assign({
       value: r.nome.toUpperCase(),
-      position: `0 0.05 ${r.d / 2 - 0.09}`,
+      position: `0 0.02 ${round2(pertoPlaca + 0.045)}`,
       rotation: "-90 0 0",
       align: "center",
       color: CORES.textoFraco,
@@ -83,7 +92,7 @@ function buildRegioes() {
 
     const valor = el("a-text", Object.assign({
       value: "",
-      position: `0 0.05 ${-r.d / 2 + 0.08}`,
+      position: `0 0.02 ${round2(pertoPlaca + 0.095)}`,
       rotation: "-90 0 0",
       align: "center",
       color: CORES.texto,
@@ -136,11 +145,11 @@ function buildColunas() {
     const x = COLUNAS.xs[i];
     if (x == null) return;
 
-    // A coluna encara o ponto de observacao do desenho. Sem isto, quem esta na
-    // marca ve os quatro rotulos de esguelha (o grupo e local a mesa, entao a
-    // conta e feita em coordenadas de mesa).
-    const obsLocal = { x: PLANTA.usuario.x - PLANTA.mapa.cx, z: PLANTA.usuario.z - PLANTA.mapa.cz };
-    const guinada = encarar({ x, z: COLUNAS.z }, obsLocal);
+    // (piloto-v1) A coluna fica de frente para a linha do tempo, paralela a
+    // ela: quem anda de lado ve as quatro do mesmo jeito. Viradas para um
+    // ponto so, as quinas da base e do halo giravam para tras e entravam na
+    // faixa dos rotulos do Sul.
+    const guinada = 0;
     const grupo = el("a-entity", {
       position: `${x} ${COLUNAS.y0} ${COLUNAS.z}`,
       rotation: `0 ${guinada} 0`,
@@ -149,27 +158,30 @@ function buildColunas() {
     const largura = (COLUNAS.cols - 1) * COLUNAS.gap + COLUNAS.size + 0.06;
 
     // Base acesa na cor do indicador: identidade visual antes de qualquer texto.
+    // Base fina e rasa (8 mm x 5 cm): mais alta e funda, vista de cima e de lado
+    // a quina dela ficava por baixo do rotulo deitado - verde sobre verde.
     const base = el("a-box", {
       width: largura,
-      height: 0.014,
-      depth: 0.08,
-      position: "0 0.007 0",
+      height: 0.008,
+      depth: 0.05,
+      position: "0 0.004 0",
       material: `color: ${ind.cor}; shader: flat; opacity: 0.55; transparent: true`,
     });
     grupo.appendChild(base);
 
+    // O halo do indicador ativo cobre a coluna E os rotulos da frente.
     const halo = el("a-box", {
       width: largura + 0.05,
       height: 0.008,
-      depth: 0.12,
-      position: "0 0.002 0",
+      depth: 0.18,
+      position: "0 0.002 0.03",
       visible: false,
       material: `color: ${CORES.focoBorda}; shader: flat; opacity: 0.9; transparent: true`,
     });
     grupo.appendChild(halo);
 
     // 10 x 10 em pe: trilho de 100 blocos, acesos ate o valor de 2024.
-    const voxHost = el("a-entity", { position: "0 0.03 0" });
+    const voxHost = el("a-entity", { position: "0 0.019 0" });
     grupo.appendChild(voxHost);
     const handle = createVoxelGrid({
       count: COLUNAS.cols * COLUNAS.cols,
@@ -184,26 +196,29 @@ function buildColunas() {
 
     const alturaVox = (COLUNAS.cols - 1) * COLUNAS.gap + 0.03;
 
-    const valor = el("a-text", Object.assign({
-      value: "",
-      position: `0 ${alturaVox + 0.06} 0`,
-      align: "center",
-      color: CORES.texto,
-      font: FONTE,
-    }, escalaTexto(6, 0.022)));
-    grupo.appendChild(valor);
-
+    // Nome e valor deitados na frente da base (entre ela e a beira da mesa).
     // Primeira palavra: "Eficiencia Academica" nao cabe na largura da coluna,
     // e "Eficiencia" ja identifica sozinha (a cor faz o resto).
     const curto = rotuloCurtoIndicador(ind);
     const nome = el("a-text", Object.assign({
       value: curto,
-      position: `0 ${alturaVox + 0.115} 0`,
+      position: "0 0.012 0.06",
+      rotation: "-90 0 0",
       align: "center",
       color: ind.cor,
       font: FONTE,
-    }, escalaTexto(Math.max(curto.length, 10), 0.02)));
+    }, escalaTexto(Math.max(curto.length, 10), 0.021)));
     grupo.appendChild(nome);
+
+    const valor = el("a-text", Object.assign({
+      value: "",
+      position: "0 0.012 0.094",
+      rotation: "-90 0 0",
+      align: "center",
+      color: CORES.texto,
+      font: FONTE,
+    }, escalaTexto(6, 0.022)));
+    grupo.appendChild(valor);
 
     // Alvo do olhar do tamanho do bloco de voxels, no plano dele. O alvo
     // antigo (0,5 m de altura, 7 cm a frente) cobria os rotulos e, visto da

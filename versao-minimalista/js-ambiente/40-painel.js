@@ -42,7 +42,8 @@ function buildChartGrade() {
     dom.chartGrid.appendChild(
       el("a-text", Object.assign({
         value: `${v}`,
-        position: `${round2(CH.x0 - 0.05)} ${y} 0.006`,
+        // 7 cm do eixo: o anel do ano atual (2017, perto de 50%) encostava no "50"
+        position: `${round2(CH.x0 - 0.07)} ${y} 0.006`,
         align: "right",
         anchor: "right",
         color: "#7e92b4",
@@ -155,12 +156,28 @@ function buildSerie(ctx, serie, ind) {
   // Callouts do pico e do vale (o desfecho): construidos ja, mostrados so no
   // ultimo ano. Quem e o pior ano depende do SENTIDO do indicador
   // (rotulosCallout, em 04-narrativa.js - a condicao 2D usa os mesmos cartoes).
+  // O lugar de cada cartao (posicionarCartoes, tambem compartilhado) evita a
+  // linha, os pontos, a referencia nacional e o outro cartao, e nao sai da
+  // area do grafico: nem sobre os rotulos do eixo, nem sobre a parede de
+  // blocos, nem sobre o rotulo do evento (que fica acima do grafico).
   const cards = calloutsDaSerie(ctx, state.indicadorKey);
+  const lugares = posicionarCartoes(cards, serie, {
+    X: chartXFor,
+    Y: chartYFor,
+    w: CALLOUT.w,
+    h: CALLOUT.h,
+    folga: CALLOUT.folga,
+    raio: 0.045,
+    margem: 0.008,
+    xMin: CH.x0 - 0.03,
+    xMax: CH.x1 + 0.24,
+    yMin: CH.baseY + 0.015,
+    yMax: CH.baseY + CH.maxH,
+    cima: 1,
+    ref: ctx.tipo !== "brasil" ? DADOS.brasil.series[state.indicadorKey] : null,
+  });
   cards.forEach((c, k) => {
-    // Cards de 0,44 m com passo de 0,24 m entre anos: pico e vale proximos se
-    // encavalariam, entao o segundo desce para baixo da linha.
-    const colide = k > 0 && Math.abs(chartXFor(c.idx) - chartXFor(cards[0].idx)) < CALLOUT.w + 0.08;
-    serieEls.cards.push(buildCallout(c, serie, c.tipo === "critico" ? "#ff9f6b" : "#7fd4ff", colide ? "abaixo" : "acima"));
+    serieEls.cards.push(buildCallout(c, c.tipo === "critico" ? "#ff9f6b" : "#7fd4ff", lugares[k]));
   });
 
   serieEls.eventos = buildEventos(serie);
@@ -182,22 +199,14 @@ function revelarAte(idx, ctx) {
   serieEls.cards.forEach((g) => setEntityVisible(g, fim));
 }
 
-const CALLOUT = { w: 0.44, h: 0.1, folga: 0.13 };
+// h 0,11: com 0,10 o valor encostava na borda de baixo do cartao.
+const CALLOUT = { w: 0.44, h: 0.11, folga: 0.13 };
 
 // rotulosCallout(sentido) mora em 04-narrativa.js: a condicao 2D usa os
 // mesmos nomes (PIOR ANO / MELHOR ANO / MAIOR / MENOR).
 
-function buildCallout(card, serie, cor, lado) {
-  const idx = card.idx;
-  const x = chartXFor(idx);
-  const y = chartYFor(serie[idx]);
-  // Teto e piso: o card nunca sobe ate o filete do cabecalho nem desce sobre
-  // os rotulos de ano.
-  const yCard =
-    lado === "abaixo"
-      ? Math.max(y - CALLOUT.folga, CH.baseY + CALLOUT.h / 2 + 0.02)
-      : Math.min(y + CALLOUT.folga, chartYFor(100) - 0.02);
-  const g = el("a-entity", { class: "callout", position: `${x} ${round2(yCard)} 0.024` });
+function buildCallout(card, cor, lugar) {
+  const g = el("a-entity", { class: "callout", position: `${round2(lugar.x)} ${round2(lugar.y)} 0.024` });
   g.appendChild(
     el("a-plane", {
       width: CALLOUT.w,
@@ -209,14 +218,14 @@ function buildCallout(card, serie, cor, lado) {
     el("a-plane", {
       width: CALLOUT.w,
       height: 0.006,
-      position: "0 0.047 0.002",
+      position: `0 ${round2(CALLOUT.h / 2 - 0.003)} 0.002`,
       material: `color: ${cor}; shader: flat`,
     })
   );
   g.appendChild(
     el("a-text", Object.assign({
       value: card.rotulo,
-      position: "0 0.014 0.004",
+      position: "0 0.018 0.004",
       align: "center",
       color: cor,
       font: FONTE,
@@ -225,7 +234,7 @@ function buildCallout(card, serie, cor, lado) {
   g.appendChild(
     el("a-text", Object.assign({
       value: card.valor,
-      position: "0 -0.024 0.004",
+      position: "0 -0.022 0.004",
       align: "center",
       color: CORES.texto,
       font: FONTE,
@@ -241,8 +250,9 @@ function buildEventos(serie) {
     const idx = DADOS.anos.indexOf(ev.ano);
     if (idx < 0 || serie[idx] == null) return;
     const x = chartXFor(idx);
-    // Faixa vertical discreta + etiqueta rente ao eixo: o evento marca o ano
-    // sem disputar espaco com o callout, que fica em cima da linha.
+    // Faixa vertical discreta + etiqueta ACIMA do grafico (como na 2D): rente
+    // ao eixo, ela caia em cima da linha dos indicadores de valor baixo
+    // (retencao) e dos pontos.
     const faixa = el("a-plane", {
       width: 0.016,
       height: CH.maxH,
@@ -252,7 +262,7 @@ function buildEventos(serie) {
     const etiqueta = el("a-text", Object.assign({
       class: "evento",
       value: rotuloEvento(ev),
-      position: `${x} ${round2(CH.baseY + 0.05)} 0.01`,
+      position: `${x} ${round2(CH.baseY + CH.maxH + 0.035)} 0.01`,
       align: "center",
       color: "#ffd166",
       font: FONTE,

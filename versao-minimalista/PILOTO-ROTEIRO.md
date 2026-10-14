@@ -1,8 +1,9 @@
 # Roteiro do piloto (e da sessão de estudo)
 
-Versão do artefato: **piloto-v1** (sala única "Camadas Retóricas Visíveis", com
-a **linha do tempo no piso**: andar de lado muda o ano). O que mudou desde a
-piloto-v0 está em `CHANGELOG.md`; a v0 continua na tag `piloto-v0`.
+Versão do artefato: **piloto-v1.1** (sala única "Camadas Retóricas Visíveis",
+com a **linha do tempo no piso**: andar de lado muda o ano; a v1.1 corrige
+sobreposições de textos e elementos). O que mudou em cada versão está em
+`CHANGELOG.md`; a v0 continua na tag `piloto-v0`.
 
 **Objetivo do piloto:** 2 ou 3 pessoas de fora do projeto, pelo menos uma que
 **nunca usou VR**, ~30 min cada, antes da coleta. Não é coleta de dados para a
@@ -25,8 +26,9 @@ piloto).
   node tests/paridade-2d.js
   node tests/quest-sim.js
   node tests/estudo-sim.js
+  node tests/sobreposicao.js
   ```
-  (os quatro últimos precisam de `npm i -D playwright iwer`, uma vez)
+  (os cinco últimos precisam de `npm i -D playwright iwer`, uma vez)
 - [ ] **Ensaio sozinho:** faça você mesmo uma sessão completa nas duas
   condições, pela estação, e rode `node estudo/analisar.js` sobre o seu próprio
   arquivo. Confira se cada variável dependente que o desenho do estudo prevê sai
