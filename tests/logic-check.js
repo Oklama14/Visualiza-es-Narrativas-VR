@@ -15,7 +15,7 @@ const check = (cond, msg) => { if (!cond) { console.error("  FALHA:", msg); falh
 const warn = (cond, msg) => { if (!cond) { console.warn("  AVISO:", msg); avisos += 1; } };
 
 // ---- Replicas das funcoes puras do app.js (mantidas em sincronia) ----
-const CHART = { x0: -3.0, x1: 3.0, baseY: 1.15, maxH: 1.35, z: -3.3 };
+const CHART = { x0: -3.0, x1: 3.0, baseY: 1.15, maxH: 1.3, z: -3.3, topoPainel: 2.74 };
 const xFor = (i) => CHART.x0 + i * ((CHART.x1 - CHART.x0) / (DADOS.anos.length - 1));
 const yFor = (v) => CHART.baseY + (v / 100) * CHART.maxH;
 
@@ -161,8 +161,8 @@ console.log("  ok (sem excecoes/NaN)");
 
 // 3) Geometria do grafico: yFor dentro do painel; callouts dentro dos limites.
 console.log("\n[3] Geometria do grafico (eixo, marcadores, callouts)");
-const panelTop = 1.85 + 1.95 / 2;   // chartPanel y=1.85 h=1.95 -> 2.825
-const panelBottom = 1.85 - 1.95 / 2; // 0.875
+const panelTop = 1.785 + 1.91 / 2;   // chartPanel y=1.785 h=1.91 -> 2.74
+const panelBottom = 1.785 - 1.91 / 2; // 0.83
 let foraGrade = 0, calloutFora = 0;
 contextos.forEach((ctx) => {
   DADOS.indicadores.forEach((ind) => {
@@ -176,17 +176,12 @@ contextos.forEach((ctx) => {
       // marcador deve estar dentro do painel verticalmente
       warn(y <= panelTop && y >= panelBottom, `${rotuloContexto(ctx)}/${ind.key} ano ${DADOS.anos[i]}: marcador y=${y.toFixed(2)} fora do painel`);
     });
-    // callout do critico
-    const { peakIdx, valleyIdx } = extremos(s);
-    [peakIdx, valleyIdx].forEach((idx) => {
-      if (idx < 0 || s[idx] == null) return;
-      const x = xFor(idx), y = yFor(s[idx]);
-      const lado = x <= 0 ? 1 : -1;
-      const cardX = x + lado * 0.95;
-      const cardY = Math.min(yFor(100) - 0.1, y + 0.55);
-      if (cardX < CHART.x0 - 0.85 || cardX > CHART.x1 + 0.85) calloutFora += 1;
-      warn(cardY <= panelTop, `${rotuloContexto(ctx)}/${ind.key}: callout y=${cardY.toFixed(2)} acima do painel`);
-    });
+    // callouts: o posicionador (posicionarNoGrafico) prende o cartao entre
+    // x0 - 0,1 e x1 + 0,6 e entre a base + 0,03 e o topo do painel - 0,04;
+    // aqui, a regra de que esses limites cabem no painel (7,4 de largura).
+    const CALLOUT = { w: 1.4, h: 0.46 };
+    const xMin = CHART.x0 - 0.1, xMax = CHART.x1 + 0.6, yMin = CHART.baseY + 0.03, yMax = CHART.topoPainel - 0.04;
+    if (xMin < -3.7 || xMax > 3.7 || yMax - yMin < CALLOUT.h) calloutFora += 1;
   });
 });
 console.log(`  valores fora da grade 0-100%: ${foraGrade} (esperado 0 para %)`);
@@ -288,44 +283,46 @@ console.log(`  eventos: ${(DADOS.eventos || []).map((e) => e.ano).join(", ") || 
 const sulEx = DADOS.regioes.find((r) => r.id === "sul");
 console.log(`  ex.: Sul evasao 2024 -> "${absoluteText(sulEx, "evasao", DADOS.anos.length - 1)}"`);
 
-// 7) Layout da linha do tempo: sem sobreposicao, controles dentro do FOV e acima do piso.
-console.log("\n[7] Layout da linha do tempo");
-const TL = {
-  narrativeTitleY: 3.34,
-  narrativeTextY: 3.0,
-  chartTopY: CHART.baseY + CHART.maxH,       // gridline de 100%
-  eventTagY: CHART.baseY + CHART.maxH + 0.16, // etiqueta de evento
-  panelTopY: 1.85 + 1.95 / 2,                // 2.825
-  ticksY: CHART.baseY - 0.22,
-  narrativeYearY: 0.7,
-  guidedHintY: 0.48,
-  controlsY: 0.24,
-  controlH: 0.44,
-  controlsZ: -2.45,
-};
-// Cabecalho (narrativeText) deve ficar acima do topo do grafico e da etiqueta de evento.
-check(TL.narrativeTextY - 0.18 > TL.chartTopY, "narrativeText pode sobrepor o topo do grafico");
-check(TL.narrativeTextY > TL.eventTagY, "narrativeText pode sobrepor a etiqueta de evento (2020)");
-// Ordem vertical decrescente e separada na regiao inferior.
-const ordem = [TL.ticksY, TL.narrativeYearY, TL.guidedHintY, TL.controlsY];
-for (let i = 0; i < ordem.length - 1; i++) {
-  check(ordem[i] - ordem[i + 1] >= 0.18, `elementos inferiores muito proximos (${ordem[i]} vs ${ordem[i + 1]})`);
+// 7) Layout da linha do tempo, NA TELA (camera 0 1,6 0, fov vertical 80):
+//    os blocos estao a profundidades diferentes, entao a ordem e a folga sao
+//    medidas em % da altura da tela, nao em metros.
+console.log("\n[7] Layout da linha do tempo (em % da altura da tela)");
+const TAN40 = Math.tan((40 * Math.PI) / 180);
+const pctTela = (y, z) => 50 - 50 * ((y - 1.6) / Math.abs(z)) / TAN40;
+const lh = (w, wrap) => (2.1 * w) / (wrap + 0.5); // altura de linha (line-height 60 na Poppins)
+const TL = [
+  // nome, topo, base, z  (cabecalho preso pelo topo: reserva 2 + 3 linhas)
+  ["manchete (2 linhas)", 4.12, 4.12 - 2 * lh(4.8, 46), -3.9],
+  ["texto (3 linhas)", 3.63, 3.63 - 3 * lh(4.8, 64), -3.9],
+  ["etiqueta 2020", CHART.baseY + CHART.maxH + 0.24, CHART.baseY + CHART.maxH + 0.04, -3.26],
+  ["topo do painel", panelTop, panelTop - 0.01, -3.4],
+  ["rotulos de ano", CHART.baseY - 0.23 + 0.04, CHART.baseY - 0.23 - 0.04, -3.3],
+  ["linha do ano (2 linhas)", 0.62 + lh(6, 76), 0.62 - lh(6, 76), -3.0],
+  ["dica (1 linha)", 0.56 + lh(5, 80) / 2, 0.56 - lh(5, 80) / 2, -2.45],
+  ["controles", 0.24 + 0.22, 0.24 - 0.22, -2.45 + 0.04],
+].map(([nome, topo, base, z]) => ({ nome, a: pctTela(topo, z), b: pctTela(base, z) }));
+TL.forEach((t) => console.log(`  ${t.nome.padEnd(24)} ${t.a.toFixed(1)}% .. ${t.b.toFixed(1)}%`));
+for (let i = 0; i < TL.length - 1; i += 1) {
+  if (TL[i].nome === "etiqueta 2020") continue; // a etiqueta fica dentro do painel
+  const folga = TL[i + 1].a - TL[i].b;
+  check(folga >= 0.5, `linha do tempo: "${TL[i].nome}" encosta em "${TL[i + 1].nome}" na tela (folga ${folga.toFixed(1)}%)`);
 }
-// Controles acima do piso (y=0).
-check(TL.controlsY - TL.controlH / 2 >= 0, "controles cruzam o piso (y=0)");
+check(TL[0].a > 8, "manchete passa do topo da tela");
+check(TL[TL.length - 1].b < 95, "controles saem por baixo da tela");
+check(0.24 - 0.22 >= 0, "controles cruzam o piso (y=0)");
 // FOV + sobreposicao horizontal da faixa de controles.
 const ctrlBoxes = [
   { id: "prev", x: -3.0, w: 0.56 }, { id: "next", x: -2.0, w: 0.56 },
   { id: "compare", x: -1.05, w: 1.02 }, { id: "narrate", x: 0.05, w: 0.98 },
   { id: "replay", x: 1.15, w: 1.02 }, { id: "indic", x: 2.45, w: 1.2 },
 ].sort((a, b) => a.x - b.x);
-ctrlBoxes.forEach((c) => check(dentroFOV(c.x + (c.x < 0 ? -c.w / 2 : c.w / 2), TL.controlsY, TL.controlsZ), `controle ${c.id} fora do FOV`));
+ctrlBoxes.forEach((c) => check(dentroFOV(c.x + (c.x < 0 ? -c.w / 2 : c.w / 2), 0.24, -2.45), `controle ${c.id} fora do FOV`));
 let minCtrlGap = Infinity;
 for (let i = 0; i < ctrlBoxes.length - 1; i++) {
   const gap = (ctrlBoxes[i + 1].x - ctrlBoxes[i + 1].w / 2) - (ctrlBoxes[i].x + ctrlBoxes[i].w / 2);
   minCtrlGap = Math.min(minCtrlGap, gap);
 }
-console.log(`  marcadores em altura ~olhos: y ${CHART.baseY.toFixed(2)}..${TL.chartTopY.toFixed(2)} (olho 1.6)`);
+console.log(`  marcadores em altura ~olhos: y ${CHART.baseY.toFixed(2)}..${(CHART.baseY + CHART.maxH).toFixed(2)} (olho 1.6)`);
 console.log(`  menor folga entre controles: ${minCtrlGap.toFixed(2)}`);
 check(minCtrlGap > 0.04, `controles da timeline se sobrepoem (folga ${minCtrlGap.toFixed(2)})`);
 

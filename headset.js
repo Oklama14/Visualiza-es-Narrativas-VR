@@ -1,20 +1,21 @@
 // ----------------------------------------------------------------------------
-// headset.js - o que so existe dentro do Meta Quest 2.
+// headset.js - o que so existe dentro do Meta Quest 3 (e Quest 2).
 //
 // Carregado ANTES do app.js (o A-Frame so inicializa a cena com o documento
 // "complete", entao da tempo de ajustar o renderer e registrar componentes).
-// Tudo aqui saiu da simulacao do Quest 2 (tests/quest-sim.js):
 //   - perfil do renderer pela URL, para comparar no headset sem editar codigo
-//     (?hz=90 ?aa=0 ?fov=0..1 ?fps=1);
+//     (padrao Meta Quest 3: 90 Hz e foveacao 0; fallback Quest 2: ?hz=72&fov=0.5;
+//      tambem aceita ?aa=0 ?fov=0..1 ?fps=1);
 //   - `sobrepor`: reticulo, legenda e HUD de VR desenhados por cima do mundo;
 //   - `reticulo-olhar`: o anel do olhar vai ate o ponto mirado (sem visao
 //     dupla), cresce sobre o que da para selecionar e enche durante o fuse;
 //   - `maos-locais`: o modelo das maos sai de assets/maos/ (offline);
+//   - `controles-locais`: o modelo dos controles Touch Plus sai de assets/controles/ (offline);
 //   - `medidor-fps`: fps real do headset e draw calls, so com ?fps=1;
 //   - aviso quando a pagina foi aberta por HTTP na rede (sem WebXR).
 // ----------------------------------------------------------------------------
 
-const PERFIL_HEADSET = { hz: 72, aa: true, fov: 0.5, fps: false };
+const PERFIL_HEADSET = { hz: 90, aa: true, fov: 0, fps: false };
 
 (function perfilDoHeadset() {
   const scene = document.querySelector("a-scene");
@@ -29,8 +30,9 @@ const PERFIL_HEADSET = { hz: 72, aa: true, fov: 0.5, fps: false };
     .filter((kv) => kv.length === 2 && kv[0].trim())
     .forEach(([k, v]) => (atual[k.trim()] = v.trim()));
 
-  if (p.get("hz") === "90") atual.highRefreshRate = "true";
-  else if (p.get("hz") === "72") atual.highRefreshRate = "false";
+  const hzParam = p.get("hz");
+  if (hzParam === "90" || hzParam === "120") atual.highRefreshRate = "true";
+  else if (hzParam === "72") atual.highRefreshRate = "false";
   if (p.get("aa") === "0") atual.antialias = "false";
   else if (p.get("aa") === "1") atual.antialias = "true";
   const fov = parseFloat(p.get("fov"));
@@ -43,9 +45,9 @@ const PERFIL_HEADSET = { hz: 72, aa: true, fov: 0.5, fps: false };
       .join("; ")
   );
 
-  PERFIL_HEADSET.hz = atual.highRefreshRate === "true" ? 90 : 72;
+  PERFIL_HEADSET.hz = hzParam === "120" ? 120 : atual.highRefreshRate === "true" ? 90 : 72;
   PERFIL_HEADSET.aa = atual.antialias !== "false";
-  PERFIL_HEADSET.fov = Number(atual.foveationLevel);
+  PERFIL_HEADSET.fov = Number.isNaN(Number(atual.foveationLevel)) ? 0 : Number(atual.foveationLevel);
   PERFIL_HEADSET.fps = p.get("fps") === "1";
 
   if (PERFIL_HEADSET.fps) {
@@ -66,6 +68,24 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 if (window.AFRAME) {
+  // -------------------------------------------------------------------------
+  // Texto MSDF sem "pontinhos" (mesma correcao da versao minimalista). O shader
+  // msdf do A-Frame 1.5 faz
+  //   alpha = sigDist / fwidth(sigDist)
+  // e, onde o campo de distancia e plano (miolo do "O", cantos de cada letra),
+  // fwidth da 0: a divisao por zero e indefinida no GLSL ES e virava pontos e
+  // blocos claros em volta das letras (visivel nos prints em 1920x1080). Um piso
+  // minusculo no fwidth nao muda nada onde ele e > 0 e elimina o caso indefinido.
+  // Precisa rodar antes de a cena criar os materiais (headset.js vem antes).
+  // -------------------------------------------------------------------------
+  const msdf = AFRAME.shaders && AFRAME.shaders.msdf && AFRAME.shaders.msdf.Shader;
+  if (msdf && typeof msdf.prototype.fragmentShader === "string") {
+    msdf.prototype.fragmentShader = msdf.prototype.fragmentShader.replace(
+      "sigDist / fwidth(sigDist)",
+      "sigDist / max(fwidth(sigDist), 0.00001)"
+    );
+  }
+
   // -------------------------------------------------------------------------
   // sobrepor: desenha a entidade (e filhos) por cima do mundo.
   // -------------------------------------------------------------------------
@@ -171,6 +191,45 @@ if (window.AFRAME) {
       const tc = this.el.components["tracked-controls"];
       const rastreada = !!(c && c.hasPoses && tc && tc.controller && tc.controller.hand);
       if (this.el.object3D.visible !== rastreada) this.el.object3D.visible = rastreada;
+    },
+  });
+
+  // -------------------------------------------------------------------------
+  // controles-locais: intercepta o oculus-touch-controls (criado pelo
+  // laser-controls) para servir o modelo Meta Quest 3 Touch Plus a partir de
+  // assets/controles/ sem requisicao a cdn.aframe.io (100% offline).
+  // -------------------------------------------------------------------------
+  AFRAME.registerComponent("controles-locais", {
+    dependencies: ["laser-controls"],
+    init() {
+      this.aplicar = this.aplicar.bind(this);
+      this.aplicar();
+      this.el.addEventListener("componentinitialized", (e) => {
+        if (e.detail && e.detail.name === "oculus-touch-controls") this.aplicar();
+      });
+    },
+    aplicar() {
+      const c = this.el.components["oculus-touch-controls"];
+      if (!c || c.__vrlabLocal) return;
+      c.__vrlabLocal = true;
+      const orig = c.loadModel;
+      c.loadModel = function (controller) {
+        const lado = this.data && this.data.hand === "left" ? "left" : "right";
+        const localUrl = `assets/controles/quest-touch-plus-${lado}.glb`;
+        const origSetAttr = this.el.setAttribute;
+        this.el.setAttribute = function (attr, val) {
+          if (attr === "gltf-model" && typeof val === "string" && /^https?:\/\//i.test(val)) {
+            return origSetAttr.call(this, attr, localUrl);
+          }
+          return origSetAttr.apply(this, arguments);
+        };
+        try {
+          orig.call(this, controller);
+          this.isTouchV3orPROorPlus = true;
+        } finally {
+          this.el.setAttribute = origSetAttr;
+        }
+      };
     },
   });
 

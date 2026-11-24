@@ -43,8 +43,12 @@ const linhas = (texto, wrap) => Math.max(1, Math.ceil(texto.length / wrap));
 
 // Blocos de HUD 2D (fracao da tela) - medidos do styles.css em 1366x768,
 // o pior caso realista de janela de apresentacao.
-const HUD_TOPO = { x0: 2, x1: 34, y0: 3, y1: 20 }; // brand-panel
-const HUD_RODAPE = { x0: 2, x1: 28, y0: 74, y1: 97 }; // nota-panel
+// Desde a revisao "nada em cima de nada" o painel do topo tem no maximo 25vw
+// (ate ~28,5% da largura em 1366) e a nota "Como ler" fica recolhida num chip
+// no rodape (aberta so nos primeiros segundos de cada etapa). O teste completo
+// (com o DOM medido de verdade em 3 janelas) e o tests/sobreposicao.js.
+const HUD_TOPO = { x0: 2, x1: 28.5, y0: 3, y1: 24 }; // brand-panel (+ legenda)
+const HUD_RODAPE = { x0: 2, x1: 21, y0: 90, y1: 97 }; // chip da nota recolhida
 
 // ---------------------------------------------------------------------------
 // Leitura das constantes de geometria do app.js
@@ -87,6 +91,7 @@ function textoDe(id) {
     ...pos,
     width: Number(attrs.width || 1),
     wrap: Number(attrs["wrap-count"] || 40),
+    topo: attrs.baseline === "top", // preso pelo topo: cresce para baixo
   };
 }
 
@@ -101,8 +106,9 @@ function blocoTexto(nome, id, texto) {
   const t = textoDe(id);
   const n = linhas(texto, t.wrap);
   const meia = (n * alturaLinha(t.width, t.wrap)) / 2;
+  const centro = t.topo ? t.y - meia : t.y;
   return {
-    nome, z: t.z, topo: t.y + meia, base: t.y - meia,
+    nome, z: t.z, topo: centro + meia, base: centro - meia,
     larguraTexto: Math.min(texto.length, t.wrap) * larguraChar(t.width, t.wrap),
     x: t.x,
   };
@@ -236,7 +242,7 @@ const topoMedidor = GAUGE.y + GAUGE.rOut + 0.08; // marca do topo do medidor
 conferirPilha("3. Indicadores com painel-equacao", [
   blocoCaixa("painel-equacao", CAUSAL.y, CAUSAL.z, CAUSAL.h),
   blocoCaixa("topo dos medidores", topoMedidor - 0.05, -2.7, 0.1),
-  blocoCaixa("rotulo do medidor", GAUGE.y - GAUGE.rOut - 0.2, -3.25, alturaLinha(2.0, 18)),
+  blocoCaixa("rotulo do medidor", GAUGE.y - GAUGE.rOut - 0.14, -3.25, alturaLinha(1.5, 24)),
   blocoCaixa("botao composicao", posDe("compEnter").y, posDe("compEnter").z, 0.4),
 ]);
 

@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050711'/%3E%3Ccircle cx='32' cy='32' r='18' fill='%2355d6ff'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=14" />
+    <link rel="stylesheet" href="styles.css?v=17" />
     <!-- A-Frame (cena 3D, WebXR, camera, cursor, raycaster).
          Tenta a copia LOCAL (funciona offline); se ela nao existir/falhar,
          cai automaticamente no CDN. Para ativar o modo offline, baixe o
@@ -42,26 +42,39 @@
     </div>
 
     <main class="screen-frame" aria-label="Laboratorio VR de Dados">
-      <div class="brand-panel">
-        <span class="brand-kicker">Plataforma Nilo Pecanha &middot; Rede Federal</span>
-        <strong id="hudTitle">Escolha um contexto</strong>
-        <span id="hudSubtitle">Narrativa de eficiencia academica (2017-2024)</span>
-        <nav class="breadcrumb" id="breadcrumb" aria-label="Trilha de navegacao">Mapa do Brasil</nav>
+      <!-- Coluna da esquerda (como na versao minimalista): painel + legendas
+           empilhados. Antes as legendas tinham "top" fixo e, com um subtitulo de
+           2 linhas, a legenda da comparacao ficava em cima do painel. -->
+      <div class="hud-left">
+        <div class="brand-panel">
+          <span class="brand-kicker">Plataforma Nilo Pecanha &middot; Rede Federal</span>
+          <strong id="hudTitle">Escolha um contexto</strong>
+          <span id="hudSubtitle">Narrativa de eficiencia academica (2017-2024)</span>
+          <nav class="breadcrumb" id="breadcrumb" aria-label="Trilha de navegacao">Mapa do Brasil</nav>
+        </div>
+        <div class="hud-legend" id="hudLegend" hidden>
+          <span class="legend-dot legend-primary"></span><span id="legendPrimary">Contexto</span>
+          <span class="legend-dot legend-compare"></span><span id="legendCompare">Comparacao</span>
+        </div>
+        <div class="hud-legend" id="compLegend" hidden>
+          <span class="legend-dot legend-conc"></span><span>Concluidos</span>
+          <span class="legend-dot legend-ret"></span><span>Retidos</span>
+          <span class="legend-dot legend-evad"></span><span>Evadidos</span>
+        </div>
       </div>
-      <div class="hud-legend" id="hudLegend" hidden>
-        <span class="legend-dot legend-primary"></span><span id="legendPrimary">Contexto</span>
-        <span class="legend-dot legend-compare"></span><span id="legendCompare">Comparacao</span>
-      </div>
-      <div class="hud-legend" id="compLegend" hidden>
-        <span class="legend-dot legend-conc"></span><span>Concluidos</span>
-        <span class="legend-dot legend-ret"></span><span>Retidos</span>
-        <span class="legend-dot legend-evad"></span><span>Evadidos</span>
-      </div>
-      <aside class="nota-panel" id="notaPanel" aria-label="Nota sobre a visualizacao">
+      <!-- "Como ler": aberta ao entrar em cada etapa e recolhida (so o titulo)
+           depois de alguns segundos; o mouse por cima abre de novo. Aberta o
+           tempo todo, ela ficava por cima dos controles de ano, do medidor da
+           esquerda e do "< Anterior" do tour. -->
+      <aside class="nota-panel" id="notaPanel" aria-label="Nota sobre a visualizacao" tabindex="0">
         <span class="nota-kicker">Como ler esta visualizacao</span>
         <strong id="notaTitle">Visualizacao narrativa</strong>
         <p id="notaBody"></p>
       </aside>
+      <!-- Legenda da narracao no desktop (rodape, como legenda de filme). A 3D,
+           presa a camera, ficava no meio da tela, por cima da linha do ano e da
+           dica da abertura guiada. Em VR quem aparece e a 3D (#captionPanel). -->
+      <div class="legenda-2d" id="legenda2d" role="status" aria-live="polite" hidden></div>
       <div class="tour-bar" id="tourBar" hidden>
         <span class="tour-bar__label" id="tourBarLabel">Tour guiado</span>
         <div class="tour-bar__track">
@@ -78,9 +91,9 @@
         <h2>Como navegar</h2>
         <p class="onboard-sub">Uma experiencia de dados em 3D - use no desktop com o mouse ou em VR.</p>
         <ul>
-          <li><strong>Desktop:</strong> arraste com o mouse para olhar ao redor e <strong>clique</strong> num card ou objeto para escolher.</li>
+          <li><strong>Desktop:</strong> aponte com o mouse para inspecionar e <strong>clique</strong> num card, regiao ou medidor para escolher.</li>
           <li><strong>Explorar:</strong> passe o mouse sobre um medidor para ver a explicacao; clique para abrir a linha do tempo.</li>
-          <li><strong>VR:</strong> toque em <em>VR</em>. Com <strong>controles</strong>, aponte o laser e aperte o gatilho. Com as <strong>maos</strong>, mire com o olhar (reticulo) e <strong>belisque</strong> (polegar + indicador, palma virada para fora). Sem maos nem controles, mire e <strong>segure</strong> o olhar.</li>
+          <li><strong>Meta Quest 3 (VR):</strong> toque em <em>VR</em>. Com <strong>controles Touch</strong>, aponte o laser e aperte o gatilho (<em>B/Y</em> volta, <em>analogico</em> troca ano/cena, <em>X</em> abre Como ler). Com as <strong>maos</strong>, mire com o olhar e <strong>belisque</strong> (palma para fora). Sem maos nem controles, mire e <strong>segure</strong> o olhar.</li>
         </ul>
         <button id="onboardStart" type="button">Comecar</button>
         <p class="onboard-foot">Voce pode rever isto no botao "?" no canto.</p>
@@ -88,13 +101,13 @@
     </div>
     <button class="help-btn" id="helpBtn" type="button" aria-label="Rever ajuda">?</button>
 
-    <!-- renderer: valores para o Quest 2. No A-Frame, foveationLevel 1 e a foveacao
-         MAXIMA (borra o texto da periferia); 0,5 e o meio-termo. 72 Hz estaveis em
-         vez de 90 Hz que podem perder quadro. Para comparar no headset sem editar
-         nada, use a URL: ?hz=90  ?aa=0  ?fov=0..1  ?fps=1 (ver headset.js). -->
+    <!-- renderer: valores padrao para o Meta Quest 3 (90 Hz + foveacao 0 para
+         aproveitar a nitidez das lentes pancake). Para Quest 2 ou testes no
+         headset sem editar codigo, use a URL: ?hz=72  ?fov=0.5  ?aa=0  ?fps=1
+         (ver headset.js). -->
     <a-scene
       id="scene"
-      renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true; exposure: 1.1; foveationLevel: 0.5; highRefreshRate: false"
+      renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true; exposure: 1.1; foveationLevel: 0; highRefreshRate: true; sortTransparentObjects: true"
       cursor="rayOrigin: mouse; fuse: false"
       raycaster="objects: .clickable; far: 40; interval: 16"
       fog="type: linear; color: #070b16; near: 11; far: 34"
@@ -104,9 +117,9 @@
       <a-assets>
         <a-mixin
           id="softText"
-          text="font: kelsonsans; align: center; anchor: center; baseline: center"
+          text="font: assets/poppins-msdf.json; shader: msdf; negate: false; lineHeight: 60; align: center; anchor: center; baseline: center"
         ></a-mixin>
-        <img id="mapImgAsset" src="assets/mapa-brasil.png?v=14" crossorigin="anonymous" />
+        <img id="mapImgAsset" src="assets/mapa-brasil.png?v=15" crossorigin="anonymous" />
       </a-assets>
 
       <!-- Camera compartilhada: mouse no desktop e cursor gaze em VR. -->
@@ -153,25 +166,19 @@
           <!-- Painel de Legenda (HUD) -->
           <!-- sobrepor (headset.js): por cima do mundo, senao some atras do que
                estiver a menos de 1 m do rosto. -->
-          <a-entity id="captionPanel" position="0 -0.4 -1" visible="false">
-            <a-plane width="1.4" height="0.16" material="color: #000000; opacity: 0.65; transparent: true; shader: flat" sobrepor="ordem: 30"></a-plane>
-            <a-text id="captionText" value="" position="0 0 0.01" width="1.3" align="center" color="#ffffff" font="kelsonsans" wrap-count="60" sobrepor="ordem: 31"></a-text>
-          </a-entity>
-
-          <!-- HUD de contexto para VR: o HUD 2D (breadcrumb + nota "Como ler") nao
-               aparece no headset, entao espelhamos o essencial aqui, fixo a camera na
-               base do campo de visao. Visivel apenas em VR (ligado em enter-vr). -->
-          <a-entity id="vrHud" position="0 -0.66 -1.15" visible="false">
-            <a-plane width="1.46" height="0.5" material="color: #0a1220; opacity: 0.82; transparent: true; shader: flat" sobrepor="ordem: 20"></a-plane>
-            <a-plane width="1.46" height="0.014" position="0 0.235 0.002" material="color: #4cc9f0; opacity: 0.7; transparent: true; shader: flat" sobrepor="ordem: 21"></a-plane>
-            <a-text id="vrCrumb" value="" position="-0.69 0.18 0.01" width="1.7" align="left" anchor="left" color="#8fb3dd" font="kelsonsans" wrap-count="52" sobrepor="ordem: 22"></a-text>
-            <a-text id="vrNotaKicker" value="COMO LER" position="-0.69 0.075 0.01" width="1.9" align="left" anchor="left" color="#87dcff" font="kelsonsans" sobrepor="ordem: 22"></a-text>
-            <a-text id="vrNotaTitle" value="" position="-0.69 -0.01 0.01" width="1.5" align="left" anchor="left" color="#ffffff" font="kelsonsans" wrap-count="42" sobrepor="ordem: 22"></a-text>
-            <a-text id="vrNotaBody" value="" position="-0.69 -0.13 0.01" width="1.42" align="left" anchor="left" color="#b9c8de" font="kelsonsans" wrap-count="50" sobrepor="ordem: 22"></a-text>
+          <!-- So em VR (no desktop a legenda e a barra 2D #legenda2d, no rodape).
+               Medidas da versao minimalista: ~20 graus abaixo do centro e 46
+               colunas (linhas longas empurravam as pontas para a borda borrada da
+               lente). Fundo de 0,24 m: 5 linhas cabem dentro dele (com 0,16 as
+               falas longas saiam do fundo). Enquanto ela aparece, o #vrHud
+               (logo abaixo) se esconde: antes a legenda cobria a trilha do HUD. -->
+          <a-entity id="captionPanel" position="0 -0.36 -1" visible="false">
+            <a-plane width="0.92" height="0.24" material="color: #000000; opacity: 0.78; transparent: true; shader: flat" sobrepor="ordem: 30"></a-plane>
+            <a-text id="captionText" value="" position="0 0 0.01" width="0.84" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" wrap-count="46" sobrepor="ordem: 31"></a-text>
           </a-entity>
 
           <!-- Medidor de quadros (so com ?fps=1): fps real do headset e draw calls. -->
-          <a-text id="fpsTexto" value="" visible="false" position="-0.3 0.3 -1" width="0.5" wrap-count="16" align="left" color="#9dffb0" font="kelsonsans" sobrepor="ordem: 32"></a-text>
+          <a-text id="fpsTexto" value="" visible="false" position="-0.3 0.3 -1" width="0.5" wrap-count="16" align="left" color="#9dffb0" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" sobrepor="ordem: 32"></a-text>
         </a-entity>
 
         <!-- Maos (hand tracking do Quest): so o modelo visivel - quem mira e o
@@ -188,6 +195,7 @@
           id="rightHand"
           visible="false"
           laser-controls="hand: right"
+          controles-locais
           raycaster="objects: .clickable; far: 40; interval: 16; showLine: true; lineColor: #4cc9f0; lineOpacity: 0.75; enabled: false"
           cursor="fuse: false; downEvents: triggerdown; upEvents: triggerup; rayOrigin: entity"
         ></a-entity>
@@ -195,6 +203,7 @@
           id="leftHand"
           visible="false"
           laser-controls="hand: left"
+          controles-locais
           raycaster="objects: .clickable; far: 40; interval: 16; showLine: true; lineColor: #4cc9f0; lineOpacity: 0.75; enabled: false"
           cursor="fuse: false; downEvents: triggerdown; upEvents: triggerup; rayOrigin: entity"
         ></a-entity>
@@ -226,8 +235,10 @@
         <!-- iluminacao geral da sala -->
         <a-entity light="type: ambient; color: #9fb0d0; intensity: 0.4"></a-entity>
         <a-entity light="type: point; color: #cfe0ff; intensity: 0.65; distance: 18" position="0 4 0"></a-entity>
-        <!-- painel de luz no teto -->
-        <a-plane rotation="90 0 0" width="6" height="6" position="0 4.27 -1.5" material="color: #bcd0f0; emissive: #bcd0f0; emissiveIntensity: 0.22; opacity: 0.5; transparent: true; shader: flat"></a-plane>
+        <!-- painel de luz no teto: mais curto para o fundo (ate z -2,5). Ate -4,5
+             ele ficava, visto do centro, logo atras dos titulos do topo
+             (manchete, "INDICADORES EM 2024"): letra clara sobre o painel claro. -->
+        <a-plane rotation="90 0 0" width="6" height="4" position="0 4.27 -0.5" material="color: #bcd0f0; emissive: #bcd0f0; emissiveIntensity: 0.22; opacity: 0.5; transparent: true; shader: flat; depthWrite: false"></a-plane>
       </a-entity>
 
       <!-- ============================================================= -->
@@ -247,45 +258,45 @@
         ></a-entity>
 
         <!-- aneis concentricos no piso (tapete de palco) para profundidade -->
-        <a-ring position="0 0.02 -2.2" rotation="-90 0 0" radius-inner="3.4" radius-outer="3.46" material="color: #2b4d86; opacity: 0.5; transparent: true; shader: flat"></a-ring>
-        <a-ring position="0 0.02 -2.2" rotation="-90 0 0" radius-inner="5.2" radius-outer="5.25" material="color: #1d3a63; opacity: 0.32; transparent: true; shader: flat"></a-ring>
-        <a-circle position="0 0.015 -2.2" rotation="-90 0 0" radius="2.9" material="color: #1b3a6b; opacity: 0.22; transparent: true; shader: flat"></a-circle>
+        <a-ring position="0 0.02 -2.2" rotation="-90 0 0" radius-inner="3.4" radius-outer="3.46" material="color: #2b4d86; opacity: 0.5; transparent: true; shader: flat; depthWrite: false"></a-ring>
+        <a-ring position="0 0.02 -2.2" rotation="-90 0 0" radius-inner="5.2" radius-outer="5.25" material="color: #1d3a63; opacity: 0.32; transparent: true; shader: flat; depthWrite: false"></a-ring>
+        <a-circle position="0 0.015 -2.2" rotation="-90 0 0" radius="2.9" material="color: #1b3a6b; opacity: 0.22; transparent: true; shader: flat; depthWrite: false"></a-circle>
 
-        <a-text
+        <a-text data-linha-unica="1"
           id="selectionKicker"
           value="EXPERIENCIA DE DADOS EM REALIDADE VIRTUAL"
           position="0 3.75 -3.6"
           color="#6fa8e6"
-          width="5.2"
+          width="4.4"
           align="center"
-          font="kelsonsans"
+          font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
         ></a-text>
-        <a-text
+        <a-text data-linha-unica="1" wrap-count="36"
           id="selectionTitle"
           value="Eficiencia Academica da Rede Federal"
           position="0 3.36 -3.6"
           color="#f4f8ff"
-          width="6.2"
+          width="4.4"
           align="center"
-          font="kelsonsans"
+          font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
         ></a-text>
-        <a-text
+        <a-text wrap-count="56"
           id="selectionLead"
           value="Escolha um contexto e percorra a evasao, a conclusao e a eficiencia ao longo de 2017-2024."
           position="0 2.92 -3.6"
           color="#9fb2d6"
-          width="5.6"
+          width="4.4"
           align="center"
-          font="kelsonsans"
+          font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
         ></a-text>
 
         <!-- Placa de controles: letreiro lateral de sala (referencia para VR; fora
              do campo de visao frontal do desktop, onde o onboarding/"?" ja cobrem isso). -->
         <a-entity id="roomSign" position="-4.7 1.75 -1.4" rotation="0 48 0">
-          <a-plane width="3.0" height="0.62" material="color: #0b1322; opacity: 0.85; transparent: true; shader: flat"></a-plane>
-          <a-plane width="3.0" height="0.04" position="0 0.31 0.01" material="color: #4cc9f0; shader: flat"></a-plane>
-          <a-text value="Controles" position="-1.35 0.18 0.02" width="2.6" align="left" anchor="left" color="#9be7ff" font="kelsonsans"></a-text>
-          <a-text value="Arraste para olhar, clique para escolher. VR: mire e segure." position="0 -0.06 0.02" width="2.8" align="center" color="#cdd9ec" wrap-count="42" font="kelsonsans"></a-text>
+          <a-plane width="3.0" height="0.72" material="color: #0b1322; opacity: 0.85; transparent: true; shader: flat"></a-plane>
+          <a-plane width="3.0" height="0.04" position="0 0.36 0.01" material="color: #4cc9f0; shader: flat"></a-plane>
+          <a-text value="Controles" position="-1.35 0.22 0.02" width="2.6" align="left" anchor="left" color="#9be7ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+          <a-text id="roomSignBody" value="Desktop: aponte e clique. VR: gatilho (controles), pinca (maos) ou olhar." position="0 -0.08 0.02" width="2.75" align="center" color="#cdd9ec" wrap-count="42" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
         </a-entity>
 
         <!-- A2: Galeria de historias curadas (cards criados por buildTourGallery). -->
@@ -293,8 +304,8 @@
         </a-entity>
 
         <!-- Visao principal por regiao: mapa do Brasil com hotspots. -->
-        <a-text id="mapKicker" value="VISAO NACIONAL POR REGIAO" position="0 3.95 -4.0" color="#6fa8e6" width="5.0" align="center" font="kelsonsans"></a-text>
-        <a-text id="mapTitle" value="Olhe para uma regiao; clique para explorar" position="0 3.6 -4.0" color="#f4f8ff" width="5.6" align="center" font="kelsonsans"></a-text>
+        <a-text data-linha-unica="1" id="mapKicker" value="VISAO NACIONAL POR REGIAO" position="0 3.95 -4.0" color="#6fa8e6" width="4.4" align="center" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+        <a-text data-linha-unica="1" id="mapTitle" value="Olhe para uma regiao; clique para explorar" position="0 3.6 -4.0" color="#f4f8ff" width="4.6" align="center" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
         <a-entity id="mapView" visible="true">
           <a-entity id="mapPanel" position="0 2.0 -3.8">
             <a-plane id="mapImg" width="2.9" height="2.7" material="src: #mapImgAsset; shader: flat; transparent: true"></a-plane>
@@ -305,26 +316,28 @@
           <a-entity id="brasilBtn" position="-2.85 2.4 -3.0" rotation="0 20 0">
             <a-box class="selection-clickable" width="1.55" height="1.05" depth="0.07" material="color: #1d4ed8; roughness: 0.4; metalness: 0.14; emissive: #7bdcff; emissiveIntensity: 0.1"></a-box>
             <a-plane width="1.34" height="0.03" position="0 0.42 0.05" material="color: #7bdcff; shader: flat"></a-plane>
-            <a-text value="Brasil" position="0 0.17 0.07" width="1.7" align="center" color="#ffffff" font="kelsonsans"></a-text>
-            <a-text value="Visao nacional" position="0 -0.04 0.07" width="1.4" align="center" color="#cfe0f4" font="kelsonsans"></a-text>
-            <a-text id="brasilEfic" value="" position="0 -0.3 0.07" width="1.5" align="center" color="#9be7ff" font="kelsonsans"></a-text>
+            <a-text value="Brasil" position="0 0.17 0.07" width="1.7" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+            <a-text value="Visao nacional" position="0 -0.04 0.07" width="1.4" align="center" color="#cfe0f4" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+            <a-text id="brasilEfic" value="" position="0 -0.3 0.07" width="1.5" align="center" color="#9be7ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
 
           <!-- Botao Comparar Regioes (Small Multiples), abaixo do Brasil. -->
           <a-entity id="multiplosBtn" position="-2.85 1.35 -3.0" rotation="0 20 0">
             <a-box class="selection-clickable" width="1.55" height="0.8" depth="0.07" material="color: #1a2f4c; roughness: 0.4; metalness: 0.14; emissive: #4cc9f0; emissiveIntensity: 0.1"></a-box>
             <a-plane width="1.34" height="0.02" position="0 0.3 0.05" material="color: #4cc9f0; shader: flat"></a-plane>
-            <a-text value="Comparar" position="0 0.08 0.07" width="1.7" align="center" color="#ffffff" font="kelsonsans"></a-text>
-            <a-text value="Regioes" position="0 -0.12 0.07" width="1.7" align="center" color="#ffffff" font="kelsonsans"></a-text>
+            <a-text value="Comparar" position="0 0.08 0.07" width="1.7" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+            <a-text value="Regioes" position="0 -0.12 0.07" width="1.7" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
 
           <!-- Cartao de preview da regiao (aparece ao olhar/passar o mouse). -->
-          <a-entity id="mapPreview" visible="false" position="2.75 2.0 -3.0" rotation="0 -20 0">
-            <a-plane width="2.5" height="1.5" material="color: #0b1322; opacity: 0.95; transparent: true; shader: flat"></a-plane>
-            <a-plane id="mapPrevAccent" width="2.5" height="0.05" position="0 0.72 0.01" material="color: #4cc9f0; shader: flat"></a-plane>
-            <a-text id="mapPrevTitle" value="" position="-1.12 0.5 0.02" width="2.4" align="left" anchor="left" color="#ffffff" font="kelsonsans"></a-text>
-            <a-text id="mapPrevVals" value="" position="-1.12 0.18 0.02" width="2.7" align="left" anchor="left" color="#9be7ff" font="kelsonsans"></a-text>
-            <a-text id="mapPrevComment" value="" position="-1.12 -0.2 0.02" width="2.3" align="left" anchor="left" color="#cfe0f4" wrap-count="34" font="kelsonsans"></a-text>
+          <!-- 2,2 de largura em x 2,5 (era 2,5 em 2,75): a ponta direita saia da
+               tela em 16:9 e a esquerda nao pode cobrir o Nordeste no mapa. -->
+          <a-entity id="mapPreview" visible="false" position="2.5 2.0 -3.0" rotation="0 -20 0">
+            <a-plane width="2.2" height="1.5" material="color: #0b1322; opacity: 0.95; transparent: true; shader: flat"></a-plane>
+            <a-plane id="mapPrevAccent" width="2.2" height="0.05" position="0 0.72 0.01" material="color: #4cc9f0; shader: flat"></a-plane>
+            <a-text id="mapPrevTitle" value="" position="-0.98 0.5 0.02" width="2.4" align="left" anchor="left" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" data-linha-unica="1"></a-text>
+            <a-text id="mapPrevVals" value="" position="-0.98 0.18 0.02" width="2.25" align="left" anchor="left" color="#9be7ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" data-linha-unica="1"></a-text>
+            <a-text id="mapPrevComment" value="" position="-0.98 -0.2 0.02" width="1.96" align="left" anchor="left" color="#cfe0f4" wrap-count="34" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
         </a-entity>
 
@@ -332,7 +345,9 @@
         <a-entity id="drillCards" visible="false"></a-entity>
 
         <!-- Botao Voltar do drill-down (volta para os cards principais). -->
-        <a-entity id="drillBack" position="-4.1 2.95 -2.8" rotation="0 24 0" visible="false">
+        <!-- Mesmo canto do "Voltar" (superior direito): na esquerda ficava cortado
+             pela borda da janela e atras do painel do HUD. -->
+        <a-entity id="drillBack" position="3.35 3.95 -3.9" rotation="0 -38 0" visible="false">
           <a-box
             class="drill-clickable"
             width="1.4"
@@ -346,7 +361,7 @@
             width="2.4"
             align="center"
             color="#dcebff"
-            font="kelsonsans"
+            font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
           ></a-text>
         </a-entity>
       </a-entity>
@@ -368,48 +383,48 @@
         ></a-entity>
 
         <!-- aneis concentricos no piso (tapete de palco) -->
-        <a-ring position="0 0.02 -3.0" rotation="-90 0 0" radius-inner="3.6" radius-outer="3.66" material="color: #1c3a63; opacity: 0.4; transparent: true; shader: flat"></a-ring>
-        <a-ring position="0 0.02 -3.0" rotation="-90 0 0" radius-inner="5.6" radius-outer="5.64" material="color: #142845; opacity: 0.26; transparent: true; shader: flat"></a-ring>
+        <a-ring position="0 0.02 -3.0" rotation="-90 0 0" radius-inner="3.6" radius-outer="3.66" material="color: #1c3a63; opacity: 0.4; transparent: true; shader: flat; depthWrite: false"></a-ring>
+        <a-ring position="0 0.02 -3.0" rotation="-90 0 0" radius-inner="5.6" radius-outer="5.64" material="color: #142845; opacity: 0.26; transparent: true; shader: flat; depthWrite: false"></a-ring>
 
         <!-- Titulo/contexto comum aos dois sub-modos. -->
-        <a-text
+        <a-text data-linha-unica="1"
           id="contextKicker"
           value=""
-          position="0 3.86 -3.9"
+          position="0 4.05 -3.9"
           color="#6fb6e6"
-          width="4.6"
+          width="4.4"
           align="center"
-          font="kelsonsans"
+          font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
         ></a-text>
-        <a-text
+        <a-text data-linha-unica="1"
           id="contextTitle"
           value=""
-          position="0 3.5 -3.9"
+          position="0 3.72 -3.9"
           color="#f7fbff"
-          width="5.4"
+          width="4.8"
           align="center"
-          font="kelsonsans"
+          font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
         ></a-text>
-        <a-text
+        <a-text wrap-count="64"
           id="contextLead"
           value=""
-          position="0 3.08 -3.9"
+          position="0 3.36 -3.9"
           color="#9fb2d0"
-          width="5.2"
+          width="4.8"
           align="center"
-          font="kelsonsans"
+          font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
         ></a-text>
 
         <!-- ---- Sub-modo A: indicadores (4 objetos do contexto). ---- -->
         <a-entity id="indicatorView" visible="false">
-          <a-circle id="indicatorGlow" position="0 0.04 -2.9" rotation="-90 0 0" radius="3.2" material="color: #4cc9f0; opacity: 0.06; transparent: true; shader: flat"></a-circle>
+          <a-circle id="indicatorGlow" position="0 0.04 -2.9" rotation="-90 0 0" radius="3.2" material="color: #4cc9f0; opacity: 0.06; transparent: true; shader: flat; depthWrite: false"></a-circle>
           <a-ring
             id="focusRing"
             position="0 0.045 -2.9"
             rotation="-90 0 0"
             radius-inner="3.0"
             radius-outer="3.1"
-            material="color: #4cc9f0; opacity: 0.3; transparent: true; shader: flat"
+            material="color: #4cc9f0; opacity: 0.3; transparent: true; shader: flat; depthWrite: false"
             animation__pulse="property: material.opacity; from: 0.16; to: 0.4; dir: alternate; loop: true; dur: 2200; easing: easeInOutSine"
           ></a-ring>
           <a-entity id="indicatorObjects"></a-entity>
@@ -425,7 +440,7 @@
               depth="0.08"
               material="color: #14233c; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.2"
             ></a-box>
-            <a-text value="Para onde vao os alunos  >" position="0 0 0.06" width="2.3" align="center" color="#cfe9ff" font="kelsonsans"></a-text>
+            <a-text value="Para onde vao os alunos  >" position="0 0 0.06" width="2.3" align="center" color="#cfe9ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
 
           <!-- Painel interpretativo do indicador (hover/clique). -->
@@ -450,7 +465,7 @@
               width="3.4"
               align="left"
               anchor="left"
-              font="kelsonsans"
+              font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
             ></a-text>
             <a-text
               id="infoValue"
@@ -460,7 +475,7 @@
               width="4.2"
               align="left"
               anchor="left"
-              font="kelsonsans"
+              font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
             ></a-text>
             <a-text
               id="infoDescription"
@@ -471,7 +486,7 @@
               align="left"
               anchor="left"
               wrap-count="52"
-              font="kelsonsans"
+              font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
             ></a-text>
             <a-text
               id="infoHint"
@@ -481,7 +496,7 @@
               width="3.2"
               align="left"
               anchor="left"
-              font="kelsonsans"
+              font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
             ></a-text>
           </a-entity>
         </a-entity>
@@ -489,63 +504,82 @@
         <!-- ---- Sub-modo B: linha do tempo (grafico anotado). ---- -->
         <a-entity id="timelineView" visible="false">
           <!-- brilho de fundo (spotlight) com a cor do indicador -->
-          <a-circle id="chartGlow" position="0 1.85 -3.7" radius="4.0" material="color: #4cc9f0; opacity: 0.05; transparent: true; shader: flat; side: double"></a-circle>
+          <!-- depthWrite: false nos brilhos e faixas translucidas: desenhados antes,
+               gravavam profundidade e apagavam o que estava atras (a manchete e o
+               texto da narrativa ficavam invisiveis atras deste circulo). -->
+          <a-circle id="chartGlow" position="0 1.85 -3.7" radius="4.0" material="color: #4cc9f0; opacity: 0.05; transparent: true; shader: flat; side: double; depthWrite: false"></a-circle>
+          <!-- Legenda 3D da comparacao (visivel tambem em VR, onde o HUD 2D some).
+               Fica na faixa livre entre o texto da narrativa e o topo do painel do grafico. -->
+          <a-entity id="compareLegend3d" position="0 2.86 -3.38" visible="false">
+            <a-plane id="compareLegendDotPrimary" width="0.16" height="0.06" position="-1.5 0 0" material="color: #4cc9f0; shader: flat"></a-plane>
+            <a-text id="compareLegendPrimary3d" value="Contexto" position="-1.36 0 0" width="2.2" align="left" anchor="left" color="#eaf4ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" wrap-count="28" data-linha-unica="1"></a-text>
+            <a-plane width="0.16" height="0.06" position="0.32 0 0" material="color: #ffb454; shader: flat"></a-plane>
+            <a-text id="compareLegendCompare3d" value="Brasil" position="0.46 0 0" width="2.2" align="left" anchor="left" color="#ffd699" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" wrap-count="28" data-linha-unica="1"></a-text>
+          </a-entity>
+
           <!-- painel do grafico -->
-          <a-plane id="chartPanel" position="0 1.85 -3.4" width="7.4" height="1.95" material="color: #0a1022; opacity: 0.6; transparent: true; shader: flat"></a-plane>
-          <a-plane id="chartPanelEdge" position="0 0.88 -3.39" width="7.4" height="0.018" material="color: #2f5d8a; opacity: 0.7; transparent: true; shader: flat"></a-plane>
+          <a-plane id="chartPanel" position="0 1.785 -3.4" width="7.4" height="1.91" material="color: #0a1022; opacity: 0.6; transparent: true; shader: flat"></a-plane>
+          <a-plane id="chartPanelEdge" position="0 0.84 -3.39" width="7.4" height="0.018" material="color: #2f5d8a; opacity: 0.7; transparent: true; shader: flat"></a-plane>
 
           <a-entity id="chartGrid"></a-entity>
-          <a-plane id="focusBand" visible="false" material="color: #4cc9f0; opacity: 0.14; transparent: true; shader: flat"></a-plane>
+          <a-plane id="focusBand" visible="false" material="color: #4cc9f0; opacity: 0.14; transparent: true; shader: flat; depthWrite: false"></a-plane>
           <a-entity id="timelineBars"></a-entity>
           <a-entity id="compareBars" visible="false"></a-entity>
           <a-entity id="trendLine"></a-entity>
           <a-entity id="markers"></a-entity>
           <a-entity id="yearTicks"></a-entity>
           <a-entity id="annotations"></a-entity>
-          <a-text id="valueReadout" value="" position="0 2.6 -3.3" width="3" align="center" color="#ffffff" font="kelsonsans" visible="false"></a-text>
+          <a-text id="valueReadout" value="" position="0 2.6 -3.3" width="2.4" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" data-linha-unica="1" visible="false"></a-text>
 
           <!-- Narrativa (manchete + corpo) - cabecalho do modo linha do tempo. -->
-          <a-text id="narrativeTitle" value="" position="0 3.62 -3.9" color="#ffffff" width="5.4" align="center" wrap-count="40" font="kelsonsans"></a-text>
-          <a-text id="narrativeText" value="" position="0 3.02 -3.9" color="#bcd0ec" width="5.6" align="center" wrap-count="64" font="kelsonsans"></a-text>
-          <a-text id="narrativeYear" value="" position="0 0.7 -3.0" color="#9be7ff" width="6" align="center" wrap-count="76" font="kelsonsans"></a-text>
-          <a-text id="guidedHint" value="" position="0 0.48 -2.45" color="#7d90ab" width="4.2" align="center" font="kelsonsans"></a-text>
+          <!-- Cabecalho preso pelo TOPO (baseline top): a manchete (ate 2 linhas) e o
+               texto (ate 3) crescem para baixo e param antes do topo do grafico.
+               Largura 4,8 a 3,9 m: fica entre 29% e 71% da tela, fora do painel
+               do HUD 2D (canto superior esquerdo). Antes o texto centrado em 3,02
+               descia por tras do topo do painel do grafico e da etiqueta 2020. -->
+          <a-text id="narrativeTitle" value="" position="0 4.12 -3.9" color="#ffffff" width="4.8" align="center" baseline="top" wrap-count="46" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+          <a-text id="narrativeText" value="" position="0 3.63 -3.9" color="#bcd0ec" width="4.8" align="center" baseline="top" wrap-count="64" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+          <a-text id="narrativeYear" value="" position="0 0.62 -3.0" color="#9be7ff" width="6" align="center" wrap-count="76" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+          <!-- Uma linha (wrap 80): com o wrap padrao (40) a dica tinha 2 linhas de
+               letra grande e descia em cima dos botoes Comparar/Narrar/Reproduzir. -->
+          <a-text id="guidedHint" value="" position="0 0.56 -2.45" color="#7d90ab" width="5.0" align="center" wrap-count="80" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" data-linha-unica="1"></a-text>
 
           <!-- Faixa unica de controles (navegacao por ano a esquerda, acoes a direita). -->
           <a-entity id="scrubberRow" position="0 0.24 -2.45" visible="false">
             <a-entity id="ctrlPrevYear" position="-3.0 0 0">
               <a-box class="timeline-clickable" width="0.56" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
-              <a-text value="<" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
+              <a-text value="<" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
-            <a-text id="ctrlYearLabel" value="2024" position="-2.5 0 0" width="2.3" align="center" color="#ffffff" font="kelsonsans"></a-text>
+            <a-text id="ctrlYearLabel" value="2024" position="-2.5 0 0" width="2.3" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             <a-entity id="ctrlNextYear" position="-2.0 0 0">
               <a-box class="timeline-clickable" width="0.56" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
-              <a-text value=">" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
+              <a-text value=">" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
           </a-entity>
 
           <a-entity id="actionRow" position="0 0.24 -2.45" visible="false">
             <a-entity id="ctrlCompare" position="-1.05 0 0">
               <a-box class="timeline-clickable" width="1.02" height="0.44" depth="0.08" material="color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.2"></a-box>
-              <a-text id="ctrlCompareLabel" value="Comparar" position="0 0 0.06" width="1.65" align="center" color="#cfe9ff" font="kelsonsans"></a-text>
+              <a-text id="ctrlCompareLabel" value="Comparar" position="0 0 0.06" width="1.65" align="center" color="#cfe9ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
             <a-entity id="ctrlNarrate" position="0.05 0 0">
               <a-box class="timeline-clickable" width="0.98" height="0.44" depth="0.08" material="color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.2"></a-box>
-              <a-text id="ctrlNarrateLabel" value="Narrar" position="0 0 0.06" width="1.6" align="center" color="#cfe9ff" font="kelsonsans"></a-text>
+              <a-text id="ctrlNarrateLabel" value="Narrar" position="0 0 0.06" width="1.6" align="center" color="#cfe9ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
             <a-entity id="ctrlReplay" position="1.15 0 0">
               <a-box class="timeline-clickable" width="1.02" height="0.44" depth="0.08" material="color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.2"></a-box>
-              <a-text value="Reproduzir" position="0 0 0.06" width="1.65" align="center" color="#cfe9ff" font="kelsonsans"></a-text>
+              <a-text value="Reproduzir" position="0 0 0.06" width="1.65" align="center" color="#cfe9ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
             <a-entity id="ctrlBackIndicators" position="2.45 0 0">
               <a-box class="timeline-clickable" width="1.2" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
-              <a-text value="Indicadores" position="0 0 0.06" width="1.9" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
+              <a-text value="Indicadores" position="0 0 0.06" width="1.9" align="center" color="#eaf4ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
           </a-entity>
 
           <!-- Botao "Pular introducao" durante a abertura guiada. -->
           <a-entity id="ctrlSkip" position="0 0.24 -2.45" visible="false">
             <a-box class="timeline-clickable" width="1.9" height="0.44" depth="0.08" material="color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
-            <a-text value="Pular introducao" position="0 0 0.06" width="2.9" align="center" color="#cfe9ff" font="kelsonsans"></a-text>
+            <a-text value="Pular introducao" position="0 0 0.06" width="2.9" align="center" color="#cfe9ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
 
         </a-entity>
@@ -557,38 +591,49 @@
         <a-entity id="tourControls" visible="false" position="0 0.24 -2.45">
           <a-entity id="tourPrevBtn" position="-2.2 0 0">
             <a-box class="tour-clickable" width="1.3" height="0.44" depth="0.08" material="color: #1a1a4e; roughness: 0.45; emissive: #7b61ff; emissiveIntensity: 0.2"></a-box>
-            <a-text value="< Anterior" position="0 0 0.06" width="2.2" align="center" color="#d8ccff" font="kelsonsans"></a-text>
+            <a-text value="< Anterior" position="0 0 0.06" width="2.2" align="center" color="#d8ccff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
-          <a-text id="tourProgress" value="1 / 7" position="0 0 0" width="2.4" align="center" color="#ffffff" font="kelsonsans"></a-text>
+          <a-text id="tourProgress" value="1 / 7" position="0 0 0" width="2.4" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           <a-entity id="tourNextBtn" position="2.2 0 0">
             <a-box class="tour-clickable" width="1.6" height="0.44" depth="0.08" material="color: #1a1a4e; roughness: 0.45; emissive: #7b61ff; emissiveIntensity: 0.25"></a-box>
-            <a-text id="tourNextLabel" value="Proximo >" position="0 0 0.06" width="2.6" align="center" color="#d8ccff" font="kelsonsans"></a-text>
+            <a-text id="tourNextLabel" value="Proximo >" position="0 0 0.06" width="2.6" align="center" color="#d8ccff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
         </a-entity>
 
         <!-- ---- Sub-modo C: composicao "Para onde vao os alunos". ---- -->
         <a-entity id="composicaoView" visible="false">
-          <a-circle id="compGlow" position="0 1.72 -3.7" radius="4.0" material="color: #3ad29f; opacity: 0.05; transparent: true; shader: flat; side: double"></a-circle>
+          <a-circle id="compGlow" position="0 1.72 -3.7" radius="4.0" material="color: #3ad29f; opacity: 0.05; transparent: true; shader: flat; side: double; depthWrite: false"></a-circle>
           <a-plane id="compPanel" position="0 1.72 -3.4" width="7.9" height="1.9" material="color: #0a1022; opacity: 0.6; transparent: true; shader: flat"></a-plane>
+          <!-- Legenda 3D de cores da composicao (essencial em VR, onde #compLegend 2D some).
+               Fica na faixa superior do #compPanel, acima do teto das barras (y 2,37). -->
+          <a-entity id="compLegend3d" position="0.15 2.55 -3.28">
+            <a-plane width="0.12" height="0.12" position="-1.55 0 0" material="color: #3ad29f; shader: flat"></a-plane>
+            <a-text value="Concluidos" position="-1.42 0 0" width="2.1" align="left" anchor="left" color="#d8f5ea" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" data-linha-unica="1"></a-text>
+            <a-plane width="0.12" height="0.12" position="-0.15 0 0" material="color: #ffd166; shader: flat"></a-plane>
+            <a-text value="Retidos" position="-0.02 0 0" width="2.1" align="left" anchor="left" color="#fff1cc" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" data-linha-unica="1"></a-text>
+            <a-plane width="0.12" height="0.12" position="0.98 0 0" material="color: #ff6b6b; shader: flat"></a-plane>
+            <a-text value="Evadidos" position="1.11 0 0" width="2.1" align="left" anchor="left" color="#ffd8d8" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" data-linha-unica="1"></a-text>
+          </a-entity>
+
           <a-entity id="compScene"></a-entity>
 
-          <a-text id="compTitle" value="" position="0 3.4 -3.9" color="#ffffff" width="5.6" align="center" wrap-count="46" font="kelsonsans"></a-text>
-          <a-text id="compText" value="" position="0 2.94 -3.9" color="#bcd0ec" width="5.6" align="center" wrap-count="64" font="kelsonsans"></a-text>
-          <a-text id="compReadout" value="" position="0 0.56 -3.0" color="#9be7ff" width="5.4" align="center" wrap-count="76" font="kelsonsans"></a-text>
+          <a-text baseline="top" id="compTitle" value="" position="0 4.12 -3.9" color="#ffffff" width="4.8" align="center" wrap-count="46" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+          <a-text baseline="top" id="compText" value="" position="0 3.63 -3.9" color="#bcd0ec" width="4.8" align="center" wrap-count="64" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+          <a-text id="compReadout" value="" position="0 0.56 -3.0" color="#9be7ff" width="5.4" align="center" wrap-count="76" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
 
           <a-entity id="compScrubber" position="0 0.24 -2.45">
             <a-entity id="compPrev" position="-1.7 0 0">
               <a-box class="composicao-clickable" width="0.56" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
-              <a-text value="<" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
+              <a-text value="<" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
-            <a-text id="compYearLabel" value="2024" position="-1.15 0 0" width="2.3" align="center" color="#ffffff" font="kelsonsans"></a-text>
+            <a-text id="compYearLabel" value="2024" position="-1.15 0 0" width="2.3" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             <a-entity id="compNext" position="-0.6 0 0">
               <a-box class="composicao-clickable" width="0.56" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
-              <a-text value=">" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
+              <a-text value=">" position="0 0 0.06" width="2.2" align="center" color="#eaf4ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
             <a-entity id="compBack" position="1.15 0 0">
               <a-box class="composicao-clickable" width="1.6" height="0.44" depth="0.08" material="color: #15233d; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
-              <a-text value="Indicadores" position="0 0 0.06" width="2.4" align="center" color="#eaf4ff" font="kelsonsans"></a-text>
+              <a-text value="Indicadores" position="0 0 0.06" width="2.4" align="center" color="#eaf4ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
           </a-entity>
         </a-entity>
@@ -596,8 +641,8 @@
         <!-- ---- Sub-modo D: Small Multiples (Comparacao Regional). ---- -->
         <a-entity id="multiplosView" visible="false">
           <!-- header/narrativa (uma linha cada: titulo curto + nota curta) -->
-          <a-text id="multiplosTitle" value="" position="0 3.46 -4.0" color="#ffffff" width="4.8" align="center" wrap-count="42" font="kelsonsans"></a-text>
-          <a-text id="multiplosNote" value="" position="0 3.12 -4.0" color="#bcd0ec" width="5.6" align="center" wrap-count="64" font="kelsonsans"></a-text>
+          <a-text data-linha-unica="1" id="multiplosTitle" value="" position="0 3.46 -4.0" color="#ffffff" width="4.8" align="center" wrap-count="42" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+          <a-text data-linha-unica="1" id="multiplosNote" value="" position="0 3.12 -4.0" color="#bcd0ec" width="4.8" align="center" wrap-count="64" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
 
           <!-- seletores de indicador (linha unica, abaixo do cabecalho) -->
           <a-entity id="multiplosSelectors" position="0 2.7 -4.0"></a-entity>
@@ -605,10 +650,10 @@
           <!-- legenda no rodape da grade (fora do caminho do HUD 2D) -->
           <a-entity id="multiplosLegend" position="0 0.16 -3.7">
             <a-plane width="0.3" height="0.02" position="-1.2 0 0" material="color: #4cc9f0; shader: flat; opacity: 0.6"></a-plane>
-            <a-text value="Regiao" position="-0.95 0 0" width="2.0" align="left" anchor="left" color="#cfe0f4" font="kelsonsans"></a-text>
+            <a-text value="Regiao" position="-0.95 0 0" width="2.0" align="left" anchor="left" color="#cfe0f4" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             <a-plane width="0.1" height="0.015" position="0.3 0 0" material="color: #9fb0d0; shader: flat; opacity: 0.4"></a-plane>
             <a-plane width="0.1" height="0.015" position="0.45 0 0" material="color: #9fb0d0; shader: flat; opacity: 0.4"></a-plane>
-            <a-text value="Media Brasil" position="0.55 0 0" width="2.0" align="left" anchor="left" color="#9fb0d0" font="kelsonsans"></a-text>
+            <a-text value="Media Brasil" position="0.55 0 0" width="2.0" align="left" anchor="left" color="#9fb0d0" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
 
           <!-- container da grade -->
@@ -624,20 +669,20 @@
           <!-- Aba recolhida (sempre visivel; abre o mapa sob demanda). -->
           <a-entity id="miniMapTab">
             <a-box class="minimap-clickable" width="2.6" height="0.55" depth="0.06" material="color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22"></a-box>
-            <a-text value="Trocar regiao" position="0 0 0.05" width="2.9" align="center" color="#cfe9ff" font="kelsonsans"></a-text>
+            <a-text value="Trocar regiao" position="0 0 0.05" width="2.9" align="center" color="#cfe9ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
 
           <!-- Conteudo expansivel (oculto por padrao; sem oclusao ate o usuario abrir). -->
           <a-entity id="miniMapContent" visible="false">
             <a-plane width="3.2" height="3.5" material="color: #04060d; opacity: 0.6; transparent: true; shader: flat" position="0 0 -0.05"></a-plane>
-            <a-text value="Trocar regiao" position="0 1.75 0" width="3.0" align="center" color="#cfe0f4" font="kelsonsans"></a-text>
+            <a-text value="Trocar regiao" position="0 1.58 0" width="3.0" align="center" color="#cfe0f4" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             <a-entity id="miniMapPanel" position="0 0.1 0">
               <a-plane width="2.9" height="2.7" material="src: #mapImgAsset; shader: flat; transparent: true"></a-plane>
               <a-entity id="miniMapHotspots"></a-entity>
             </a-entity>
             <a-entity id="miniBrasilBtn" position="0 -1.7 0">
               <a-box class="minimap-region" width="1.8" height="0.5" depth="0.04" material="color: #1d4ed8; roughness: 0.4; metalness: 0.14; emissive: #7bdcff; emissiveIntensity: 0.1"></a-box>
-              <a-text value="Visao Nacional" position="0 0 0.03" width="2.0" align="center" color="#ffffff" font="kelsonsans"></a-text>
+              <a-text value="Visao Nacional" position="0 0 0.03" width="2.0" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
             </a-entity>
           </a-entity>
         </a-entity>
@@ -646,12 +691,14 @@
         <a-entity id="tourPanel" visible="false">
           <a-plane width="6.4" height="2.7" position="0 2.0 -3.6" material="color: #0b1322; opacity: 0.94; transparent: true; shader: flat"></a-plane>
           <a-plane width="6.4" height="0.06" position="0 3.32 -3.59" material="color: #7b61ff; shader: flat"></a-plane>
-          <a-text id="tourPanelKicker" value="" position="0 3.04 -3.58" width="5.6" align="center" color="#b9a6ff" font="kelsonsans"></a-text>
-          <a-text id="tourPanelTitle" value="" position="0 2.5 -3.58" width="5.9" align="center" color="#ffffff" wrap-count="32" font="kelsonsans"></a-text>
-          <a-text id="tourPanelBody" value="" position="0 1.55 -3.58" width="5.6" align="center" color="#cdd9ec" wrap-count="50" font="kelsonsans"></a-text>
+          <!-- Titulo e corpo presos pelo TOPO (baseline top): crescem para baixo.
+               Centrados, um titulo de 3 linhas subia em cima do kicker. -->
+          <a-text id="tourPanelKicker" value="" position="0 3.13 -3.58" width="4.2" align="center" color="#b9a6ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" data-linha-unica="1"></a-text>
+          <a-text id="tourPanelTitle" value="" position="0 2.92 -3.58" width="5.6" align="center" baseline="top" color="#ffffff" wrap-count="40" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
+          <a-text id="tourPanelBody" value="" position="0 2.16 -3.58" width="5.6" align="center" baseline="top" color="#cdd9ec" wrap-count="52" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           <a-entity id="tourCta" position="0 0.95 -3.2" visible="false">
             <a-box class="tour-clickable hit" width="2.8" height="0.5" depth="0.08" material="color: #1d4ed8; roughness: 0.4; emissive: #7bdcff; emissiveIntensity: 0.15"></a-box>
-            <a-text value="Explore a sua regiao  >" position="0 0 0.06" width="3.2" align="center" color="#ffffff" font="kelsonsans"></a-text>
+            <a-text value="Explore a sua regiao  >" position="0 0 0.06" width="3.2" align="center" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"></a-text>
           </a-entity>
         </a-entity>
 
@@ -662,7 +709,10 @@
         <a-entity id="visceralParticles" position="0 0.1 -2.5" visible="false"></a-entity>
 
         <!-- Botao Voltar global (volta para selecao de contexto). -->
-        <a-entity id="backButton" position="-4.1 3.0 -2.7" rotation="0 28 0">
+        <!-- Canto superior DIREITO, dentro do campo de visao do desktop. Em
+             (-4,1 3,0 -2,7) ele ficava metade fora da tela (a esquerda) e o
+             resto atras do painel do HUD. -->
+        <a-entity id="backButton" position="3.35 3.95 -3.9" rotation="0 -38 0">
           <a-box
             class="clickable exploration-clickable"
             width="1.25"
@@ -676,13 +726,43 @@
             width="2.3"
             align="center"
             color="#eaf4ff"
-            font="kelsonsans"
+            font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"
           ></a-text>
+        </a-entity>
+      </a-entity>
+      <!-- ============================================================= -->
+      <!-- HUD de contexto para VR (ancorado no mundo, nao preso ao rosto). -->
+      <!-- Visivel apenas em VR (ligado em enter-vr). Trilha no topo +    -->
+      <!-- abas compactas "Como ler" (abre/fecha sob demanda ou botao X)  -->
+      <!-- e "Altura" (alterna sentado/em pe ou clique no analogico).     -->
+      <!-- ============================================================= -->
+      <a-entity id="vrHud" position="-3.7 3.65 -3.05" rotation="0 40 0" visible="false">
+        <a-plane width="1.96" height="0.22" position="0 0.24 0" material="color: #0a1220; opacity: 0.82; transparent: true; shader: flat" sobrepor="ordem: 20"></a-plane>
+        <a-plane width="1.96" height="0.018" position="0 0.345 0.002" material="color: #4cc9f0; opacity: 0.78; transparent: true; shader: flat" sobrepor="ordem: 21"></a-plane>
+        <a-text id="vrCrumb" value="" position="-0.92 0.24 0.01" width="1.84" align="left" anchor="left" color="#9ec2e8" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" wrap-count="44" data-linha-unica="1" sobrepor="ordem: 22"></a-text>
+
+        <a-entity id="vrNotaTab" position="-0.5 -0.08 0">
+          <a-box class="vr-hud-clickable" width="0.96" height="0.32" depth="0.06" material="color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22" sobrepor="ordem: 20"></a-box>
+          <a-text id="vrNotaTabLabel" value="Como ler +" position="0 0 0.045" width="1.5" align="center" color="#cfe9ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" sobrepor="ordem: 22"></a-text>
+        </a-entity>
+
+        <a-entity id="vrAlturaBtn" position="0.5 -0.08 0">
+          <a-box class="vr-hud-clickable" width="0.96" height="0.32" depth="0.06" material="color: #16263f; roughness: 0.45; emissive: #2f5d8a; emissiveIntensity: 0.22" sobrepor="ordem: 20"></a-box>
+          <a-text id="vrAlturaLabel" value="Altura: Em pe" position="0 0 0.045" width="1.38" align="center" color="#cfe9ff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" sobrepor="ordem: 22"></a-text>
+        </a-entity>
+
+        <!-- Cartao "Como ler" expandido sob demanda (recolhido por padrao para nao bloquear a cena). -->
+        <a-entity id="vrNotaCard" position="0.12 -1.02 0.45" visible="false">
+          <a-plane width="2.18" height="1.26" material="color: #0a1220; opacity: 0.94; transparent: true; shader: flat" sobrepor="ordem: 23"></a-plane>
+          <a-plane width="2.18" height="0.025" position="0 0.618 0.002" material="color: #4cc9f0; opacity: 0.85; transparent: true; shader: flat" sobrepor="ordem: 24"></a-plane>
+          <a-text id="vrNotaKicker" value="COMO LER  (botao X para fechar)" position="-0.98 0.49 0.01" width="1.96" align="left" anchor="left" color="#87dcff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" wrap-count="46" sobrepor="ordem: 25"></a-text>
+          <a-text id="vrNotaTitle" value="" position="-0.98 0.34 0.01" width="1.96" align="left" anchor="left" color="#ffffff" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" wrap-count="36" data-linha-unica="1" sobrepor="ordem: 25"></a-text>
+          <a-text id="vrNotaBody" value="" position="-0.98 0.2 0.01" width="1.96" align="left" anchor="left" baseline="top" color="#c4d3e8" font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60" wrap-count="46" sobrepor="ordem: 25"></a-text>
         </a-entity>
       </a-entity>
     </a-scene>
 
-    <script src="headset.js?v=14"></script>
-    <script src="app.js?v=14"></script>
+    <script src="headset.js?v=18"></script>
+    <script src="app.js?v=18"></script>
   </body>
 </html>

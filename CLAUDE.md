@@ -51,7 +51,12 @@ compreensao de evasao, conclusao, eficiencia e retencao ao longo do tempo.
   `maos-locais` (modelo das maos em `assets/maos/`, offline) e `medidor-fps`; aviso de HTTPS.
 - `server.js`: servidor estatico sem dependencias. `node server.js --quest` serve HTTPS na
   rede (certificado autoassinado gerado em `.certs/`, nunca servido) para o navegador do Quest.
+- `assets/poppins-msdf.json` + `assets/poppins.png`: fonte 3D LOCAL (Poppins MSDF, a mesma da
+  versao minimalista), com Latin-1 completo. Todo `a-text` usa `FONTE_3D` (app.js) ou
+  `font="assets/poppins-msdf.json" shader="msdf" negate="false" line-height="60"` (index.html).
 - `tests/quest-sim.js`: Quest 2 emulado (IWER + Playwright), ver "Como testar".
+- `tests/sobreposicao.js`: "nada em cima de nada" - varre todas as etapas e acusa texto/
+  elemento em cima de outro (ver "Como testar" e `ANALISE-SOBREPOSICAO-V1.md`).
 
 Estetica: ambiente escuro cinematografico (sky escuro, fog para profundidade, aneis no
 piso, brilho-spotlight com a cor do indicador e vinheta 2D). A geometria do grafico fica
@@ -77,8 +82,8 @@ o HTML direto (necessario para `fetch` do `dados.json` e para WebXR).
 No Meta Quest 2 (navegador do headset, pela rede Wi-Fi): `node server.js --quest` e abrir o
 `https://<ip-do-pc>:4443/` que ele imprime (1a vez: "Avancado" -> "Continuar"). WebXR so existe
 em contexto seguro: por `http://192.168...` o botao VR vira tela cheia 2D sem erro (a pagina
-mostra um aviso). O A-Frame tem copia local em `assets/aframe-1.5.0.min.js`, mas as fontes
-(`kelsonsans`) vem de cdn.aframe.io: sem internet, o texto 3D nao aparece.
+mostra um aviso). O A-Frame (`assets/aframe-1.5.0.min.js`), a fonte 3D (`assets/poppins-msdf.json`)
+e o modelo das maos (`assets/maos/`) sao locais: a experiencia roda sem internet.
 
 ## Como testar
 
@@ -144,6 +149,20 @@ controle, alcance do olhar e conforto (angulos de cada alvo clicavel por etapa; 
 imprime a tabela), reticulo/legenda/HUD por cima do mundo, abertura guiada com voz muda,
 "Voltar" apos "Indicadores", draw calls e console. `npm i -D playwright iwer` e
 `node .\tests\quest-sim.js` (precisa de `assets/aframe-1.5.0.min.js`).
+
+Ha `tests/sobreposicao.js` (Playwright): leva o app, sem fades, a TODOS os estados - mapa
+(+ cartao de cada regiao), drill das 5 regioes, indicadores dos 70 contextos (com o painel
+de cada medidor e com o mini-mapa aberto), linha do tempo de 70 contextos x 4 indicadores x
+8 anos (comparando), a abertura guiada momento a momento, composicao x 8 anos, small
+multiples x 4 e as cenas dos 3 tours - e acusa: texto sobre texto (mesma superficie e na
+tela), texto saindo do fundo, cartao cobrindo linha/ponto, texto tapado ou desenhado em cima
+de um objeto (raios do olho ate as letras), texto ou marca de dado APAGADO pela ordem de
+desenho (translucido/hitbox que grava profundidade, desenhado antes), letra que a fonte nao
+tem, rotulo de uma linha (`data-linha-unica`) que quebrou, posicao NaN; o HUD 2D medido de
+verdade em 3 janelas (1920x1080, 1366x768, 1280x650) contra a cena projetada; e o HUD de VR
+contra a legenda. `npm i -D playwright` e `node .\tests\sobreposicao.js` (~25 min;
+`--rapido` usa so Brasil, regioes e as 6 instituicoes de nome mais longo, ~5 min; `--json
+saida.json` grava tudo). Rode depois de mexer em qualquer texto, painel ou posicao.
 
 Ha ainda `tests/layout-check.js` (sem navegador): projeta os blocos de texto/painel de
 cada etapa no espaco de tela (camera 0 1.6 0, FOV vertical 80) e acusa sobreposicao
@@ -333,9 +352,60 @@ Os objetos ficam apoiados no piso (y=0). Nao recolocar os planos gigantes de pis
   `fadeInfoPanel(show)` anima a opacidade de planos e textos via rAF, com `panelFadeToken`
   cancelando fades anteriores; `hideInfoPanelNow()` esconde na hora nas trocas de etapa.
 - Notas explicativas: objeto `NOTAS` (uma por etapa) + `setNota(chave)` atualizam o painel
-  HUD `#notaPanel`. Os numeros absolutos vem de `absoluteText`/`countFor`/`fmtInt` (usam
+  HUD `#notaPanel`. A nota abre ao entrar numa etapa e se recolhe sozinha num chip
+  ("Como ler esta visualizacao +") depois de `NOTA_ABERTA_MS` (10 s); o mouse por cima
+  abre de novo. Aberta sozinha ela deixa o clique passar (pointer-events so no chip e na
+  nota aberta pelo mouse). Aberta o tempo todo, ela cobria os controles de ano.
+  Os numeros absolutos vem de `absoluteText`/`countFor`/`fmtInt` (usam
   `series.contagens`). Os eventos de contexto sao desenhados por `buildEventos` a partir de
   `DADOS.eventos` (linha vertical + etiqueta no topo do grafico).
+
+## Nada em cima de nada (revisao 2026-10-16)
+
+Detalhes e o antes/depois em `ANALISE-SOBREPOSICAO-V1.md`. O que precisa continuar valendo:
+
+- Ordem de desenho: o renderer usa `sortTransparentObjects: true` e todo plano translucido
+  decorativo (brilhos `chartGlow`/`compGlow`/`indicatorGlow`, aneis do piso, `focusBand`,
+  barras de 0,18) e todo HITBOX invisivel (opacidade 0,001/0) tem `depthWrite: false`.
+  Um transparente que grava profundidade, desenhado antes, apaga o que esta atras dele: era
+  o que escondia a manchete da linha do tempo e o titulo da composicao (atras do brilho), as
+  linhas dos mini-graficos (atras do hitbox do painel) e os numeros dos medidores. Hitbox
+  novo SEM `depthWrite: false` volta a apagar coisas.
+- Fonte: so `FONTE_3D` / Poppins local. A kelsonsans so tinha ASCII ("·", "—", "SERTÃO"
+  perdiam letras) e vinha da internet. A Poppins nao tem "›" (a trilha de VR usa "→") nem
+  simbolos como ◉ ▲ ⇄.
+- `headset.js` corrige o shader msdf do A-Frame (`sigDist / max(fwidth(sigDist), 0.00001)`,
+  igual a minimalista). Sem isso, onde o campo de distancia e plano o `fwidth` da 0 e a
+  divisao indefinida vira pontinhos e blocos claros em volta das letras (aparece em tela
+  grande/1920x1080). Nao remover; precisa rodar antes de a cena criar os materiais.
+- `setVectorAttribute` escreve `"x y z"` (o formato `"x: 1; y: 2; z: 3"` virava NaN no A-Frame;
+  as 100 esferas do fechamento do tour nunca apareciam).
+- Cabecalhos 3D (manchete da linha do tempo, titulo da composicao, cabecalho dos
+  indicadores, titulos do mapa/drill) com largura <= 4,8 a ~3,9 m: ficam entre ~29% e ~71% da
+  tela, fora do painel do HUD 2D. Manchete/texto e titulo/texto da composicao sao presos pelo
+  topo (`baseline: top`) e reservam 2 + 3 linhas antes do topo do grafico.
+- Cartoes de pico/vale e o rotulo do ano em foco (`valueReadout`) sao posicionados por
+  `posicionarNoGrafico` (porte do `posicionarCartoes` da minimalista): lugar livre perto do
+  ponto, sem cobrir a linha, os pontos, a linha de comparacao (mesmo desligada), a etiqueta
+  do evento nem outro cartao (os dois cartoes juntos, `posicionarCallouts`, na ordem de menor
+  custo), nem o canto superior esquerdo do painel (fica sob a coluna do HUD 2D em notebook).
+  Cartoes em `CHART.z + 0,2` (na frente das esferas).
+- Anel do pedestal dos medidores gira em torno da propria normal (`-90 0 0` -> `-90 0 360`);
+  com `-90 360 0` ele ficava em pe e varria por tras dos rotulos.
+- Etiqueta de evento (2020) entre o 100% e o topo do painel (`CHART.topoPainel`).
+- `textoUmaLinha(el, texto, wrapBase)`: titulos que precisam caber em 1 linha (nomes longos
+  de instituicao) diminuem a letra em vez de quebrar. Rotulos marcados com
+  `data-linha-unica` sao conferidos pelo `tests/sobreposicao.js`.
+- HUD 2D: `.hud-left` empilha painel + legendas (nunca uma sobre o outro); painel com
+  `width: clamp(250px, 24vw, 330px)`; titulo e trilha do HUD usam a sigla da instituicao
+  (`rotuloTrilha`). "Voltar" e "< Regioes" ficam no canto superior DIREITO (3,35 3,95 -3,9):
+  na esquerda ficavam metade fora da tela e atras do painel. A barra do tour fica a
+  esquerda do botao VR do A-Frame.
+- Legenda da narracao: no desktop e a barra 2D `#legenda2d` (rodape); em VR, a 3D
+  `#captionPanel` (0,92 x 0,24, 46 colunas, -0,36 - medidas da minimalista), e o `#vrHud`
+  se esconde enquanto ela aparece (`setCaption(texto, vrForcado)`).
+- No tour, a faixa de baixo e so dos controles do tour: `#compScrubber` e `#compEnter`
+  somem nas cenas de composicao/indicadores do tour.
 
 ## Onboarding
 
@@ -358,7 +428,12 @@ headset). A placa `#roomSign` na sala resume os controles tambem para VR.
 - Depois de mexer em VR (cursor, maos, controles, posicao de alvos), rode `node .\tests\quest-sim.js`.
 - Se alterar posicoes/tamanhos/hitboxes, verifique se os cliques nao acertam objetos vizinhos
   e se os controles continuam dentro do campo de visao.
-- Banda segura da tela: mantenha os blocos entre ~20% e ~74% da altura. Acima disso fica o
-  painel HUD (canto superior esquerdo) e abaixo a nota "Como ler esta visualizacao".
+- Banda segura da tela: o painel do HUD ocupa o canto superior esquerdo (ate ~27% da
+  largura e ~25% da altura) e a nota "Como ler", recolhida, so um chip no canto inferior
+  esquerdo (aberta, nos primeiros 10 s de cada etapa, ate ~28% x ~72-95%).
+- Depois de mexer em texto, painel, posicao, cor/opacidade de material ou HUD, rode
+  `node .\tests\sobreposicao.js --rapido` (e o completo antes de fechar a versao).
+- Texto 3D novo: `...FONTE_3D` (app.js) ou os atributos da Poppins (index.html). Hitbox
+  invisivel novo: `depthWrite: false` no material.
 - Evite remover `setInteractionMode`, pois ele protege contra raycaster em objetos ocultos.
 ```

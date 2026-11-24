@@ -38,7 +38,7 @@ O servidor gera um certificado autoassinado em `.certs/` (que nunca é servido) 
 
 Para comparar no headset sem editar código: `?fps=1` (medidor de quadros dentro do VR), `?hz=90` (padrão 72 Hz), `?aa=0` (antialias), `?fov=0..1` (foveação; padrão 0,5).
 
-> Esta versão precisa de **internet** para as fontes do A-Frame (cdn.aframe.io): sem ela, o texto 3D não aparece. O A-Frame em si e o modelo das mãos já estão no projeto (`assets/`).
+> Esta versão roda **sem internet**: o A-Frame, a fonte 3D (Poppins MSDF, com acentos — a mesma da versão minimalista) e o modelo das mãos estão no projeto (`assets/`).
 
 ## 🥽 Controles da Experiência (Desktop vs VR)
 
@@ -73,4 +73,11 @@ Para simular o Meta Quest 2 (WebXR emulado pelo IWER, da Meta, com mãos, contro
 ```powershell
 npm i -D playwright iwer
 node .\tests\quest-sim.js            # --angulos imprime onde cada alvo fica no campo de visão
+```
+
+Para conferir que nenhum texto, número ou elemento fica em cima de outro (todas as etapas, os 70 contextos, o HUD 2D em 3 tamanhos de janela e o HUD de VR — ver `ANALISE-SOBREPOSICAO-V1.md`):
+```powershell
+npm i -D playwright
+node .\tests\sobreposicao.js --rapido   # ~5 min
+node .\tests\sobreposicao.js            # completo, ~25 min
 ```

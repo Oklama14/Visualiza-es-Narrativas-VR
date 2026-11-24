@@ -13,13 +13,25 @@
 
 let DADOS = null;
 
+// Fonte 3D LOCAL: Poppins MSDF, a mesma da versao minimalista (assets/). As
+// fontes de estoque do A-Frame (kelsonsans) vinham de cdn.aframe.io: sem
+// internet - no Quest, numa rede sem saida - todo o texto 3D sumia. E a
+// kelsonsans so tem ASCII: "·", "—", "IF SERTÃO-PE", "UFRN - MÚSICA" perdiam
+// letras sem aviso. A Poppins tem o Latin-1 completo. `line-height: 60`
+// mantem a altura de linha da kelsonsans (2,1 x a largura de um digito), para
+// os blocos de texto continuarem do mesmo tamanho. `shader: msdf` e
+// `negate: false` sao obrigatorios para este atlas (ver versao-minimalista).
+const FONTE = "assets/poppins-msdf.json";
+const FONTE_3D = { font: FONTE, shader: "msdf", negate: false, "line-height": 60 };
+
 // Geometria do grafico (coordenadas no mundo, dentro do ambiente escuro).
 const CHART = {
   x0: -3.0,
   x1: 3.0,
   baseY: 1.15, // mais baixo: marcadores ficam proximos da altura dos olhos (1.6)
-  maxH: 1.35,
+  maxH: 1.3, // topo em 2,45: sobra faixa para a etiqueta 2020 abaixo do topo do painel (2,74)
   z: -3.3, // barras/linha/marcadores ficam a frente do painel (-3.4)
+  topoPainel: 2.74, // topo do #chartPanel (index.html): teto dos cartoes e da etiqueta
 };
 
 // Grade do small multiples. As faixas verticais foram calculadas para caber na
@@ -66,6 +78,10 @@ const state = {
   history: [],        // pilha de navegacao: cada avanco empilha a tela atual; "Voltar" desempilha
   usingControllers: false, // VR: ha um controle Touch conectado (laser assume a mira)
   vrInput: null, // VR: "controle" | "mao" | "olhar" (ver atualizarModoEntrada)
+  activeHand: "right", // VR: mao do controle Touch com o laser ativo (laser unico)
+  vrNotaOpen: false, // VR: painel "Como ler" aberto/recolhido no mundo
+  seatedMode: false, // VR: compensacao de altura ativa para uso sentado
+  vrHeightOffset: 0, // VR: deslocamento vertical (m) aplicado ao #cameraRig
 };
 
 // ----------------------------------------------------------------------------
@@ -377,9 +393,9 @@ const NOTAS = {
 
 document.addEventListener("DOMContentLoaded", () => {
   const ids = [
-    "scene", "selectionWorld", "explorationWorld", "drillCards",
+    "scene", "camera", "selectionWorld", "explorationWorld", "drillCards",
     "drillBack", "indicatorView", "indicatorObjects", "infoPanel", "infoTitle",
-    "infoValue", "infoDescription", "infoAccent", "contextKicker",
+    "infoValue", "infoDescription", "infoAccent", "infoHint", "contextKicker",
     "contextTitle", "contextLead", "timelineView",
     "chartGlow", "chartGrid", "focusBand", "timelineBars",
     "compareBars", "trendLine", "markers", "yearTicks", "annotations",
@@ -390,26 +406,29 @@ document.addEventListener("DOMContentLoaded", () => {
     "backButton", "selectionTitle", "selectionLead", "selectionKicker",
     "transitionOverlay", "vrFade", "gazeCursor", "cameraRig", "hudTitle",
     "hudSubtitle", "hudLegend", "legendPrimary", "legendCompare", "stageSpot",
-    "notaTitle", "notaBody",
+    "notaTitle", "notaBody", "notaPanel",
     "compEnter", "composicaoView", "compScene",
     "compTitle", "compText", "compReadout", "compYearLabel",
-    "compPrev", "compNext", "compBack", "compLegend",
+    "compPrev", "compNext", "compBack", "compLegend", "compScrubber",
     "onboardOverlay", "onboardStart", "helpBtn",
     "mapKicker", "mapTitle", "mapView", "mapHotspots", "brasilBtn",
     "brasilEfic", "mapPreview", "mapPrevTitle", "mapPrevVals", "mapPrevComment",
     "tourGallery", "tourControls", "tourPrevBtn", "tourNextBtn", "tourNextLabel",
     "tourProgress", "tourBar", "tourBarFill", "tourBarStep", "tourBarLabel",
     "tourPanel", "tourPanelKicker", "tourPanelTitle", "tourPanelBody", "tourCta",
-    "roomSign", "breadcrumb",
+    "roomSign", "roomSignBody", "breadcrumb",
     "miniMapBase", "miniMapTab", "miniMapContent", "miniMapHotspots", "miniBrasilBtn",
     "indicatorLinks", "efficacyPanel",
     "multiplosBtn", "multiplosView", "multiplosTitle", "multiplosNote", "multiplosLegend", "multiplosSelectors", "multiplosGrid",
     "guidedQuestions", "captionPanel", "captionText", "visceralParticles",
-    "vrHud", "vrCrumb", "vrNotaTitle", "vrNotaBody",
+    "vrHud", "vrCrumb", "vrNotaTab", "vrNotaTabLabel", "vrNotaCard", "vrNotaTitle", "vrNotaBody",
+    "vrAlturaBtn", "vrAlturaLabel", "legenda2d",
+    "compareLegend3d", "compareLegendDotPrimary", "compareLegendPrimary3d", "compareLegendCompare3d", "compLegend3d",
   ];
   ids.forEach((id) => (dom[id] = document.getElementById(id)));
 
   initOnboarding();
+  bindNota();
 
   loadData()
     .then(() => {
@@ -455,7 +474,9 @@ function initExperience() {
   bindTimelineControls();
   bindCompControls();
   bindTourControls();
+  bindVrHudControls();
   bindVrCursorMode();
+  atualizarInstrucoesEntrada();
   setNota("selecao");
   setInteractionMode("selection");
   hideLoading(); // cena + dados prontos: remove o indicador de carregamento.
@@ -466,11 +487,42 @@ function hideLoading() {
   if (o) o.hidden = true;
 }
 
+// A nota "Como ler" abre ao entrar em cada etapa e se recolhe sozinha (so o
+// titulo, como um chip no rodape) depois de NOTA_ABERTA_MS - a ideia do
+// "is-dimmed" da versao minimalista. Aberta o tempo todo, ela cobria os
+// controles do canto inferior esquerdo (ano <, medidor da esquerda, "<
+// Anterior" do tour). O mouse por cima (ou o foco do teclado) abre de novo.
+const NOTA_ABERTA_MS = 10000;
+let notaTimer = null;
+
+function abrirNota(fecharEmMs) {
+  if (!dom.notaPanel) return;
+  dom.notaPanel.classList.remove("is-recolhida");
+  clearTimeout(notaTimer);
+  if (fecharEmMs) notaTimer = setTimeout(() => dom.notaPanel.classList.add("is-recolhida"), fecharEmMs);
+}
+
+function bindNota() {
+  if (!dom.notaPanel) return;
+  dom.notaPanel.addEventListener("mouseenter", () => {
+    dom.notaPanel.classList.add("por-mouse");
+    abrirNota(0);
+  });
+  dom.notaPanel.addEventListener("mouseleave", () => {
+    dom.notaPanel.classList.remove("por-mouse");
+    abrirNota(1200);
+  });
+  dom.notaPanel.addEventListener("focus", () => abrirNota(0));
+  dom.notaPanel.addEventListener("blur", () => abrirNota(1200));
+}
+
 function setNota(chave) {
   const nota = NOTAS[chave];
   if (!nota) return;
+  const mudou = dom.notaTitle.textContent !== nota.titulo;
   dom.notaTitle.textContent = nota.titulo;
   dom.notaBody.textContent = nota.corpo;
+  if (mudou) abrirNota(NOTA_ABERTA_MS);
   if (dom.vrNotaTitle) dom.vrNotaTitle.setAttribute("value", nota.titulo); // espelho 3D p/ VR
   if (dom.vrNotaBody) dom.vrNotaBody.setAttribute("value", nota.corpo);
 }
@@ -479,7 +531,8 @@ function setNota(chave) {
 function crumb(...parts) {
   const trilha = parts.filter(Boolean).join("  ›  ");
   if (dom.breadcrumb) dom.breadcrumb.textContent = trilha;
-  if (dom.vrCrumb) dom.vrCrumb.setAttribute("value", trilha); // espelho 3D p/ VR
+  // espelho 3D p/ VR: a fonte 3D nao tem o "›" (a letra sumia); a seta tem.
+  if (dom.vrCrumb) textoUmaLinha(dom.vrCrumb, parts.filter(Boolean).join("  →  "), 44);
 }
 
 // Entrada animada de uma etapa: sobe e assenta (easeOut), dando continuidade
@@ -488,7 +541,7 @@ function animateViewIn(viewEl) {
   if (!viewEl) return;
   viewEl.removeAttribute("animation__in");
   setVectorAttribute(viewEl, "position", "0 -0.12 0");
-  requestAnimationFrame(() => {
+  proximoQuadro(() => {
     viewEl.setAttribute(
       "animation__in",
       "property: position; from: 0 -0.12 0; to: 0 0 0; dur: 430; easing: easeOutCubic"
@@ -513,8 +566,6 @@ function dismissOnboarding() {
   if (!dom.onboardOverlay) return;
   dom.onboardOverlay.setAttribute("hidden", "");
   try { localStorage.setItem(ONBOARD_KEY, "1"); } catch (e) { /* ignore */ }
-  const isVr = dom.scene.is("vr-mode");
-  if (!isVr) dom.scene.setAttribute("look-controls", "pointerLockEnabled: false; mouseEnabled: true");
 }
 
 // ----------------------------------------------------------------------------
@@ -629,7 +680,7 @@ function buildMapa() {
     if (!reg) return;
     const hs = el("a-plane", {
       class: "hit clickable selection-clickable", width: h.w, height: h.h,
-      position: `${h.x} ${h.y} 0.02`, material: "color: #ffffff; opacity: 0.001; transparent: true",
+      position: `${h.x} ${h.y} 0.02`, material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
     });
     hs.dataset.region = h.id;
     hs.addEventListener("mouseenter", () => showRegionPreview(reg));
@@ -658,7 +709,7 @@ function buildMiniMapa() {
     if (!reg) return;
     const hs = el("a-plane", {
       class: "hit minimap-region", width: h.w, height: h.h,
-      position: `${h.x} ${h.y} 0.02`, material: "color: #ffffff; opacity: 0.001; transparent: true",
+      position: `${h.x} ${h.y} 0.02`, material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
     });
     hs.dataset.region = h.id;
     hs.addEventListener("click", () => onMiniMapClick(reg));
@@ -668,6 +719,13 @@ function buildMiniMapa() {
 }
 
 // Mini-mapa sob demanda: aba recolhida por padrao; abre num tamanho usavel.
+// Aberto, vem para a frente (z -2,3): em -3,0 o medidor da direita (z -2,7)
+// ficava na frente dele e tapava o botao "Visao Nacional".
+const MINI_MAPA = {
+  aberto: { pos: "2.25 1.6 -2.3", esc: "0.55 0.55 0.55" },
+  fechado: { pos: "3.9 2.7 -3.1", esc: "0.42 0.42 0.42" },
+};
+
 function toggleMiniMap() {
   if (state.transitioning || state.tourActive) return;
   if (state.miniMapOpen) closeMiniMap();
@@ -679,8 +737,8 @@ function openMiniMap() {
   setEntityVisible(dom.miniMapTab, false);
   setEntityVisible(dom.miniMapContent, true);
   dom.miniMapContent.querySelectorAll(".minimap-region").forEach((e) => e.classList.add("clickable"));
-  dom.miniMapBase.setAttribute("animation__pos", "property: position; to: 2.8 1.6 -3.0; dur: 240; easing: easeOutQuad");
-  dom.miniMapBase.setAttribute("animation__scale", "property: scale; to: 0.55 0.55 0.55; dur: 240; easing: easeOutQuad");
+  dom.miniMapBase.setAttribute("animation__pos", `property: position; to: ${MINI_MAPA.aberto.pos}; dur: 240; easing: easeOutQuad`);
+  dom.miniMapBase.setAttribute("animation__scale", `property: scale; to: ${MINI_MAPA.aberto.esc}; dur: 240; easing: easeOutQuad`);
   refreshRaycasters();
 }
 
@@ -689,8 +747,8 @@ function closeMiniMap() {
   setEntityVisible(dom.miniMapContent, false);
   setEntityVisible(dom.miniMapTab, true);
   dom.miniMapContent.querySelectorAll(".minimap-region").forEach((e) => e.classList.remove("clickable"));
-  dom.miniMapBase.setAttribute("animation__pos", "property: position; to: 3.9 2.7 -3.1; dur: 200; easing: easeOutQuad");
-  dom.miniMapBase.setAttribute("animation__scale", "property: scale; to: 0.42 0.42 0.42; dur: 200; easing: easeOutQuad");
+  dom.miniMapBase.setAttribute("animation__pos", `property: position; to: ${MINI_MAPA.fechado.pos}; dur: 200; easing: easeOutQuad`);
+  dom.miniMapBase.setAttribute("animation__scale", `property: scale; to: ${MINI_MAPA.fechado.esc}; dur: 200; easing: easeOutQuad`);
   refreshRaycasters();
 }
 
@@ -712,7 +770,7 @@ async function onMiniMapClick(ctx) {
   state.compareContext = resolveCompareContext(ctx);
   state.compareOn = false;
   if (dom.ctrlCompareLabel) dom.ctrlCompareLabel.setAttribute("value", "Comparar");
-  dom.hudLegend.hidden = true;
+  atualizarLegendaComparacao();
 
   if (state.stage === "indicators") {
     await enterIndicators(ctx);
@@ -782,24 +840,27 @@ function createDrillCard(item, pos, isRegion) {
     class: "card-accent", width: 0.94, height: 0.022, position: "0 0.25 0.04",
     material: `color: ${acento}; opacity: 0.88; transparent: true; shader: flat`,
   });
+  // Largura do bloco = largura util do card (1,08 - margem). Com width 1,6 o
+  // bloco era mais largo que o card: siglas longas ("UFTM - CEFORES") passavam
+  // da borda e encostavam no nome do card vizinho.
   const titulo = el("a-text", {
-    value: nome, position: "0 0.05 0.05", width: 1.6, align: "center",
-    color: "#ffffff", font: "kelsonsans", "wrap-count": 15,
+    value: nome, position: "0 0.05 0.05", width: 0.98, align: "center",
+    color: "#ffffff", ...FONTE_3D, "wrap-count": 15,
   });
   const valor = el("a-text", {
     value: eficiencia == null ? "s/ dados" : `${fmt(eficiencia)}%`,
     position: item.inconsistente ? "0 -0.16 0.05" : "0 -0.19 0.05", width: 1.15, align: "center",
-    color: "#9be7ff", font: "kelsonsans",
+    color: "#9be7ff", ...FONTE_3D,
   });
   const aviso = item.inconsistente
     ? el("a-text", {
         value: "* sob revisao", position: "0 -0.26 0.05", width: 0.95,
-        align: "center", color: "#ffb454", font: "kelsonsans",
+        align: "center", color: "#ffb454", ...FONTE_3D,
       })
     : null;
   const hit = el("a-box", {
     class: "hit clickable drill-clickable", width: 1.12, height: 0.64, depth: 0.16,
-    material: "color: #ffffff; opacity: 0.001; transparent: true",
+    material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
   });
   card.append(face, glow, titulo, valor, hit);
   if (aviso) card.append(aviso);
@@ -861,7 +922,7 @@ async function enterIndicators(ctx) {
     setEntityVisible(dom.tourPanel, false);
     setEntityVisible(dom.indicatorView, true);
     hideInfoPanelNow();
-    dom.hudLegend.hidden = true;
+    atualizarLegendaComparacao();
     dom.compLegend.hidden = true;
 
     populateIndicators(ctx);
@@ -879,9 +940,15 @@ function populateIndicators(ctx) {
   setEntityVisible(dom.contextTitle, true);
   setEntityVisible(dom.contextLead, true);
   dom.contextKicker.setAttribute("value", "INDICADORES EM 2024");
-  dom.contextTitle.setAttribute("value", rotuloContexto(ctx));
-  dom.contextLead.setAttribute("value", "Passe o mouse para entender cada indicador. Clique para abrir a linha do tempo.");
-  crumb("Mapa", rotuloContexto(ctx), "Indicadores");
+  // Nomes longos ("Centro Federal de Educacao Tecnologica Celso Suckow da
+  // Fonseca") quebravam em 2 linhas e a de baixo caia em cima do texto-guia.
+  textoUmaLinha(dom.contextTitle, rotuloContexto(ctx), 40);
+  dom.contextLead.setAttribute("value", instrucoesDoModo().contextLead);
+  crumb("Mapa", rotuloTrilha(ctx), "Indicadores");
+  // O titulo do HUD acompanha o contexto (antes ficava o da tela anterior:
+  // "Escolha uma regiao", ou a regiao do drill quando se escolhia uma instituicao).
+  dom.hudTitle.textContent = rotuloTrilha(ctx);
+  dom.hudSubtitle.textContent = "Escolha um indicador para ver a linha do tempo";
   setNota("indicadores");
 
   DADOS.indicadores.forEach((indicador, index) => {
@@ -889,6 +956,9 @@ function populateIndicators(ctx) {
     dom.indicatorObjects.appendChild(obj);
     applyPendingTransforms(obj);
   });
+  // No tour a faixa de baixo e dos controles do tour (Anterior/Proximo): o
+  // botao "Para onde vao os alunos" ficava em cima do contador "5 / 6".
+  setEntityVisible(dom.compEnter, !state.tourActive);
   // A4: construir conectores visuais (ocultos ate hover em Eficiencia).
   buildIndicatorLinks();
   animateViewIn(dom.indicatorView);
@@ -919,12 +989,18 @@ function createIndicatorObject(indicador, ctx, index) {
   const ring = el("a-ring", {
     class: "point-ring", radiusInner: 0.5, radiusOuter: 0.54, position: "0 0.07 0", rotation: "-90 0 0",
     material: `color: ${cor}; opacity: 0.5; transparent: true; shader: flat`,
-    animation__spin: `property: rotation; to: -90 360 0; dur: ${18000 + index * 1500}; loop: true; easing: linear`,
+    // Gira em torno da propria normal (Z local), deitado no piso. Com "to: -90 360 0"
+    // o giro era em Y ANTES do -90 em X (ordem XYZ do Euler): o anel se levantava e
+    // varria, em pe, ate ~0,5 m de altura - passando por tras dos rotulos dos
+    // medidores e na frente do mini-mapa aberto.
+    animation__spin: `property: rotation; from: -90 0 0; to: -90 0 360; dur: ${18000 + index * 1500}; loop: true; easing: linear`,
   });
-  // Haste que liga o pedestal ao medidor.
-  const standH = GAUGE.y - GAUGE.rOut - 0.08;
+  // Haste do pedestal ate logo abaixo do rotulo. Antes ela subia ate o medidor
+  // e atravessava o meio do rotulo ("Taxa de Evasao" cortado por uma barra).
+  const labelY = GAUGE.y - GAUGE.rOut - 0.14;
+  const standH = labelY - 0.1 - 0.08;
   const stand = el("a-cylinder", {
-    radius: 0.028, height: standH, position: `0 ${0.08 + standH / 2} 0`,
+    radius: 0.028, height: round2(standH), position: `0 ${round2(0.08 + standH / 2)} 0`,
     material: `color: ${cor}; opacity: 0.5; transparent: true; shader: flat`,
   });
   point.append(pedestal, ring, stand);
@@ -949,22 +1025,27 @@ function createIndicatorObject(indicador, ctx, index) {
   // Numero central + rotulo abaixo.
   const valueText = el("a-text", {
     value: latest == null ? "s/d" : `${fmt(value)}%`, position: `0 ${GAUGE.y + 0.03} 0.02`,
-    width: 2.5, align: "center", color: "#ffffff", font: "kelsonsans",
+    width: 2.5, align: "center", color: "#ffffff", ...FONTE_3D,
   });
   const unidade = el("a-text", {
     value: latest == null ? "sem dados" : "em 2024", position: `0 ${GAUGE.y - 0.16} 0.02`,
-    width: 1.4, align: "center", color: "#9fb2cc", font: "kelsonsans",
+    width: 1.4, align: "center", color: "#9fb2cc", ...FONTE_3D,
   });
+  // Uma linha so (wrap 24): com wrap 18, "Eficiencia Academica" quebrava em 2
+  // linhas e a de cima encostava no arco do medidor.
   const label = el("a-text", {
-    class: "point-label", value: indicador.label, position: `0 ${GAUGE.y - GAUGE.rOut - 0.2} 0.02`,
-    width: 2.0, align: "center", color: "#cdd9ec", font: "kelsonsans", "wrap-count": 18,
+    class: "point-label", value: indicador.label, position: `0 ${round2(labelY)} 0.03`,
+    width: 1.5, align: "center", color: "#cdd9ec", ...FONTE_3D, "wrap-count": 24,
   });
 
-  // Hitbox cobrindo o medidor (do pedestal ao topo).
+  // Hitbox cobrindo o medidor (do pedestal ao topo). Todo hitbox invisivel
+  // (opacidade 0,001) leva depthWrite: false: ele e transparente e, desenhado
+  // antes do numero e do arco, gravava profundidade na face da frente e os
+  // apagava (com a ordenacao dos transparentes por distancia, sortTransparentObjects).
   const topo = GAUGE.y + GAUGE.rOut + 0.2;
   const hit = el("a-box", {
     class: "clickable indicator-clickable", width: 1.35, height: topo, depth: 0.5,
-    position: `0 ${topo / 2} 0`, material: "color: #ffffff; opacity: 0.001; transparent: true",
+    position: `0 ${topo / 2} 0`, material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
   });
   point.append(track, arc, tick, valueText, unidade, label, hit);
 
@@ -1043,16 +1124,16 @@ function fadeEntity(entity, show, dur = 220) {
   });
 
   const start = performance.now();
-  function step(now) {
+  function step() {
     if (String(token) !== entity.dataset.fadeToken) return; // cancelado
-    const t = Math.min(1, (now - start) / dur);
+    const t = Math.min(1, (performance.now() - start) / dur);
     const k = show ? t : 1 - t;
     planes.forEach((p) => p.setAttribute("material", "opacity", (Number(p.dataset.baseOp) || 1) * k));
     texts.forEach((tx) => tx.setAttribute("text", "opacity", k));
-    if (t < 1) requestAnimationFrame(step);
+    if (t < 1) proximoQuadro(step);
     else if (!show) setEntityVisible(entity, false);
   }
-  requestAnimationFrame(step);
+  proximoQuadro(step);
 }
 
 function fadeInfoPanel(show) {
@@ -1090,10 +1171,12 @@ function onIndicatorClick(indicador) {
 // Geometria do painel-equacao (mundo). Fica entre o topo dos medidores (~2,23)
 // e o topo do campo de visao, sem competir com o cabecalho de contexto (que e
 // ocultado nessas cenas).
+// Mais estreito (5,5) e um pouco mais baixo (2,86): com 6,2 de largura o chip
+// da esquerda ficava por baixo do painel do HUD 2D (canto superior esquerdo).
 const CAUSAL = {
-  y: 3.02, z: -3.5, w: 6.2, h: 1.1,
-  chipW: 1.22, chipH: 0.52, chipGap: 0.07,
-  resW: 1.55, margem: 0.14,
+  y: 2.86, z: -3.5, w: 5.5, h: 1.04,
+  chipW: 1.08, chipH: 0.52, chipGap: 0.06,
+  resW: 1.4, margem: 0.12,
 };
 
 // Efeito de cada fator sobre a eficiencia (texto + cor do rotulo).
@@ -1128,7 +1211,7 @@ function buildIndicatorLinks() {
   });
   const kicker = el("a-text", {
     value: "COMO A EFICIENCIA SE FORMA", position: `0 ${round2(CAUSAL.h / 2 - 0.15)} 0.02`,
-    width: 3.4, align: "center", color: "#9be7ff", font: "kelsonsans",
+    width: 3.4, align: "center", color: "#9be7ff", ...FONTE_3D,
   });
   panel.append(bg, accent, kicker);
 
@@ -1157,16 +1240,16 @@ function buildIndicatorLinks() {
     const chipNome = el("a-text", {
       value: ind.label.replace(/^Taxa de\s+/i, ""),
       position: `${round2(cx)} ${round2(chipY + 0.16)} 0.03`,
-      width: 1.9, align: "center", color: "#dfe9ff", font: "kelsonsans",
+      width: 1.9, align: "center", color: "#dfe9ff", ...FONTE_3D,
     });
     const chipValor = el("a-text", {
       value: valor == null ? "s/d" : `${fmt(valor)}%`,
       position: `${round2(cx)} ${round2(chipY - 0.01)} 0.03`,
-      width: 2.4, align: "center", color: ind.cor, font: "kelsonsans",
+      width: 2.4, align: "center", color: ind.cor, ...FONTE_3D,
     });
     const chipEfeito = el("a-text", {
       value: efeito.verbo, position: `${round2(cx)} ${round2(chipY - 0.19)} 0.03`,
-      width: 1.7, align: "center", color: efeito.cor, font: "kelsonsans",
+      width: 1.7, align: "center", color: efeito.cor, ...FONTE_3D,
     });
     panel.append(chipBg, chipTop, chipNome, chipValor, chipEfeito);
   });
@@ -1180,7 +1263,7 @@ function buildIndicatorLinks() {
   const setaX = (fimFatores + (resX - CAUSAL.resW / 2)) / 2;
   const seta = el("a-text", {
     value: ">", position: `${round2(setaX)} ${chipY} 0.03`,
-    width: 2.6, align: "center", color: "#7d93b4", font: "kelsonsans",
+    width: 2.6, align: "center", color: "#7d93b4", ...FONTE_3D,
   });
   const resBg = el("a-plane", {
     width: CAUSAL.resW, height: CAUSAL.chipH, position: `${round2(resX)} ${chipY} 0.02`,
@@ -1193,19 +1276,19 @@ function buildIndicatorLinks() {
   });
   const resNome = el("a-text", {
     value: "Eficiencia", position: `${round2(resX)} ${round2(chipY + 0.16)} 0.03`,
-    width: 1.9, align: "center", color: "#dfe9ff", font: "kelsonsans",
+    width: 1.9, align: "center", color: "#dfe9ff", ...FONTE_3D,
   });
   const resValor = el("a-text", {
     value: efValor == null ? "s/d" : `${fmt(efValor)}%`,
     position: `${round2(resX)} ${round2(chipY - 0.06)} 0.03`,
-    width: 3.0, align: "center", color: efInd.cor, font: "kelsonsans",
+    width: 3.0, align: "center", color: efInd.cor, ...FONTE_3D,
   });
   panel.append(seta, resBg, resTop, resNome, resValor);
 
   const nota = el("a-text", {
     value: "A eficiencia pondera os retidos - nao e a soma simples dos tres.",
     position: `0 ${round2(-CAUSAL.h / 2 + 0.1)} 0.02`,
-    width: 5.2, align: "center", color: "#8da0bb", font: "kelsonsans", "wrap-count": 66,
+    width: 5.2, align: "center", color: "#8da0bb", ...FONTE_3D, "wrap-count": 66,
   });
   panel.append(nota);
 
@@ -1280,6 +1363,9 @@ function enterComposicao() {
   setEntityVisible(dom.multiplosView, false);
   setEntityVisible(dom.tourPanel, false);
   setEntityVisible(dom.composicaoView, true);
+  // No tour quem ocupa a faixa de baixo sao os controles do tour: o seletor de
+  // ano e o "Indicadores" da composicao ficavam por baixo de "Proximo >".
+  setEntityVisible(dom.compScrubber, !state.tourActive);
   setEntityVisible(dom.contextKicker, false);
   setEntityVisible(dom.contextTitle, false);
   setEntityVisible(dom.contextLead, false);
@@ -1289,13 +1375,14 @@ function enterComposicao() {
   dom.compTitle.setAttribute("value", `Para onde vao os alunos - ${rotuloCurto(state.context)}`);
   dom.compText.setAttribute("value", compNarrative(state.context));
   dom.compLegend.hidden = false;
-  crumb("Mapa", rotuloContexto(state.context), "Indicadores", "Para onde vao os alunos");
+  crumb("Mapa", rotuloTrilha(state.context), "Indicadores", "Para onde vao os alunos");
+  dom.hudTitle.textContent = rotuloTrilha(state.context);
   setNota("composicao");
   animateViewIn(dom.composicaoView);
   resetMiniMap();
 
   buildComposicao();
-  updateCompYear(); // ja chama updateCompEfficacyConnective() no fim (evita conectivo duplicado)
+  updateCompYear(); // ja escreve a linha do ano + o conectivo causal (compReadoutText)
   setInteractionMode("composicao");
 }
 
@@ -1310,7 +1397,19 @@ function compNarrative(ctx) {
   return `Em ${DADOS.anos[i]}, de ${fmtInt(m)} matriculas: ${fmt(pc)}% concluiram, ${fmt(pe)}% evadiram e ${fmt(pr)}% seguem retidos.`;
 }
 
+let compTowersRecursos = null;
+
+function disposeCompTowers() {
+  if (!compTowersRecursos) return;
+  try {
+    if (compTowersRecursos.geo) compTowersRecursos.geo.dispose();
+    (compTowersRecursos.mats || []).forEach((m) => m.dispose());
+  } catch (_) {}
+  compTowersRecursos = null;
+}
+
 function buildComposicao() {
+  disposeCompTowers();
   dom.compScene.innerHTML = "";
   const anos = DADOS.anos;
   const c = state.context.series.contagens;
@@ -1328,9 +1427,11 @@ function buildComposicao() {
     });
     // anchor:right ancora o fim do texto no x informado; sem isso o rotulo
     // (bloco centrado) avanca para dentro da area das barras.
+    // A frente das torres (z) e mais a esquerda: atras delas (z - 0,03), a
+    // primeira torre tapava os rotulos do eixo para quem olha do centro.
     const rotulo = el("a-text", {
-      value: `${pct}%`, position: `${round2(COMP.x0 - 0.32)} ${round2(y)} ${COMP.z - 0.03}`,
-      width: 1.5, align: "right", anchor: "right", color: "#7d93b4", font: "kelsonsans",
+      value: `${pct}%`, position: `${round2(COMP.x0 - 0.45)} ${round2(y)} ${round2(COMP.z + 0.2)}`,
+      width: 1.5, align: "right", anchor: "right", color: "#7d93b4", ...FONTE_3D,
     });
     dom.compScene.append(linha, rotulo);
     applyPendingTransforms(linha);
@@ -1338,6 +1439,12 @@ function buildComposicao() {
   });
 
   // Barras empilhadas (100%) por ano: concluidos (base) -> retidos -> evadidos (topo).
+  // Em vez de 800 entidades <a-box> PBR (1.600 draw calls em VR estereo), agrupamos
+  // todos os blocos em 3 THREE.InstancedMesh (1 por categoria = 3 draw calls no total),
+  // mantendo a malha 2x2 x 25 camadas (cada bloco = 1% dos estudantes do ano).
+  const layerH = COMP.maxH / 25;
+  const blocosPorCategoria = { concluidos: [], retidos: [], evadidos: [] };
+
   anos.forEach((ano, i) => {
     const m = matr[i];
     const x = compXFor(i);
@@ -1347,12 +1454,6 @@ function buildComposicao() {
       const nRet = Math.round(fr.retidos * 100);
       // evadidos = resto (j >= nConc + nRet), garantindo sempre 100 blocos.
 
-      // Torre de voxels: DECORATIVA e FORA do subtree clicavel. Como o raycaster do
-      // A-Frame mira recursivamente nos elementos .clickable, deixar os 100 voxels fora
-      // dele evita testar ~800 meshes por frame; quem captura o clique e so o hitbox.
-      // Malha 2x2 x 25 camadas; cada bloco = 1% dos estudantes do ano.
-      const layerH = COMP.maxH / 25; // ex.: 1.5/25 = 0.06; bloco com folga = layerH - 0.01
-      const tower = el("a-entity", { position: `${x} ${COMP.baseY} ${COMP.z}` });
       for (let j = 0; j < 100; j += 1) {
         const key = j < nConc ? "concluidos" : j < nConc + nRet ? "retidos" : "evadidos";
         const layer = Math.floor(j / 4);
@@ -1360,22 +1461,15 @@ function buildComposicao() {
         const dx = pInLayer % 2 === 0 ? -0.125 : 0.125;
         const dz = Math.floor(pInLayer / 2) === 0 ? -0.1 : 0.1;
         const dy = layer * layerH + layerH / 2;
-        const voxel = el("a-box", {
-          width: 0.23, depth: 0.18, height: layerH - 0.01,
-          position: `${dx} ${dy} ${dz}`,
-          material: `color: ${COMP_COLORS[key]}; roughness: 0.4; metalness: 0.1; emissive: ${COMP_COLORS[key]}; emissiveIntensity: 0.15`,
-        });
-        tower.appendChild(voxel);
+        blocosPorCategoria[key].push([x + dx, COMP.baseY + dy, COMP.z + dz]);
       }
-      dom.compScene.appendChild(tower);
-      applyPendingTransforms(tower);
 
       // Hitbox unico do ano (o unico .clickable da torre) que captura o raycaster.
       const hit = el("a-box", {
         class: "comp-seg clickable composicao-clickable",
         width: 0.5, depth: 0.4, height: COMP.maxH,
         position: `${x} ${COMP.baseY + COMP.maxH / 2} ${COMP.z}`,
-        material: "opacity: 0; transparent: true",
+        material: "opacity: 0; transparent: true; depthWrite: false",
       });
       hit.dataset.idx = String(i);
       hit.addEventListener("click", () => selectCompYear(i));
@@ -1385,7 +1479,7 @@ function buildComposicao() {
       const hit = el("a-box", {
         class: "clickable composicao-clickable", width: 0.5, depth: 0.4, height: 0.4,
         position: `${x} ${COMP.baseY + 0.2} ${COMP.z}`,
-        material: "color: #ffffff; opacity: 0.001; transparent: true",
+        material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
       });
       hit.dataset.idx = String(i);
       hit.addEventListener("click", () => selectCompYear(i));
@@ -1394,11 +1488,52 @@ function buildComposicao() {
     }
     const tick = el("a-text", {
       value: String(ano), position: `${x} ${round2(COMP.baseY - 0.26)} ${COMP.z}`,
-      width: 1.5, align: "center", color: "#90a6c6", font: "kelsonsans",
+      width: 1.5, align: "center", color: "#90a6c6", ...FONTE_3D,
     });
     dom.compScene.appendChild(tick);
     applyPendingTransforms(tick);
   });
+
+  if (typeof AFRAME !== "undefined" && AFRAME.THREE && AFRAME.THREE.InstancedMesh) {
+    const THREE = AFRAME.THREE;
+    const geo = new THREE.BoxGeometry(0.23, layerH - 0.01, 0.18);
+    const mats = [];
+    const grupo = new THREE.Group();
+    const dummy = new THREE.Object3D();
+
+    ["concluidos", "retidos", "evadidos"].forEach((key) => {
+      const lista = blocosPorCategoria[key];
+      if (!lista.length) return;
+      const mat = new THREE.MeshLambertMaterial({
+        color: COMP_COLORS[key],
+        emissive: COMP_COLORS[key],
+        emissiveIntensity: 0.15,
+      });
+      mats.push(mat);
+      const inst = new THREE.InstancedMesh(geo, mat, lista.length);
+      for (let k = 0; k < lista.length; k += 1) {
+        const [bx, by, bz] = lista[k];
+        dummy.position.set(bx, by, bz);
+        dummy.updateMatrix();
+        inst.setMatrixAt(k, dummy.matrix);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      inst.frustumCulled = false;
+      grupo.add(inst);
+    });
+
+    compTowersRecursos = { geo, mats };
+    const holder = el("a-entity", { id: "compTowersMesh" });
+    dom.compScene.appendChild(holder);
+    const anexar = () => {
+      if (holder.parentNode && typeof holder.setObject3D === "function") holder.setObject3D("mesh", grupo);
+    };
+    if (holder.hasLoaded) anexar();
+    else {
+      anexar();
+      holder.addEventListener("loaded", anexar, { once: true });
+    }
+  }
 
   // Container do foco (banda + anel) reconstruido a cada ano.
   compFocusEl = el("a-entity", {});
@@ -1452,49 +1587,47 @@ function updateCompYear() {
     // para nao invadirem o arco colorido.
     const centerYear = el("a-text", {
       value: String(ano), position: `${COMP.donutX} ${round2(COMP.donutY + 0.06)} ${COMP.z + 0.01}`,
-      width: 1.7, align: "center", color: "#ffffff", font: "kelsonsans",
+      width: 1.7, align: "center", color: "#ffffff", ...FONTE_3D,
     });
+    // Numero e "matriculas" em duas linhas: numa so, "1.234.567 matriculas"
+    // passava do furo do anel e as pontas ficavam em cima do arco colorido.
     const centerM = el("a-text", {
-      value: `${fmtInt(m)} matriculas`, position: `${COMP.donutX} ${round2(COMP.donutY - 0.11)} ${COMP.z + 0.01}`,
-      width: 1.35, align: "center", color: "#9fb2cc", font: "kelsonsans",
+      value: fmtInt(m), position: `${COMP.donutX} ${round2(COMP.donutY - 0.07)} ${COMP.z + 0.01}`,
+      width: 1.1, align: "center", color: "#cfe0f4", ...FONTE_3D,
+    });
+    const centerMRotulo = el("a-text", {
+      value: "matriculas", position: `${COMP.donutX} ${round2(COMP.donutY - 0.16)} ${COMP.z + 0.01}`,
+      width: 0.9, align: "center", color: "#9fb2cc", ...FONTE_3D,
     });
     const donutCaption = el("a-text", {
       value: "ano em foco", position: `${COMP.donutX} ${round2(COMP.donutY - COMP.rOut - 0.18)} ${COMP.z + 0.01}`,
-      width: 1.5, align: "center", color: "#7d93b4", font: "kelsonsans",
+      width: 1.5, align: "center", color: "#7d93b4", ...FONTE_3D,
     });
-    compFocusEl.append(centerYear, centerM, donutCaption);
+    compFocusEl.append(centerYear, centerM, centerMRotulo, donutCaption);
     applyPendingTransforms(centerYear);
     applyPendingTransforms(centerM);
+    applyPendingTransforms(centerMRotulo);
     applyPendingTransforms(donutCaption);
-    dom.compReadout.setAttribute(
-      "value",
-      `${ano}: ${fmtInt(c.concluidos[idx])} ${COMP_NOUN.concluidos} · ${fmtInt(c.retidos[idx])} ${COMP_NOUN.retidos} · ${fmtInt(c.evadidos[idx])} ${COMP_NOUN.evadidos}`
-    );
-  } else {
-    dom.compReadout.setAttribute("value", `${ano}: sem dados`);
   }
+  dom.compReadout.setAttribute("value", compReadoutText(state.context, idx));
   dom.hudSubtitle.textContent = `Composicao ${ano}`;
-  // A4: atualizar conectivo causal ao trocar o ano.
-  updateCompEfficacyConnective();
 }
 
-// A4: conectivo que liga a composicao (voxels de evasao) ao indicador de Eficiencia.
-function updateCompEfficacyConnective() {
-  if (!dom.compReadout || state.stage !== "composicao") return;
-  const idx = state.compYearIdx;
-  const ctx = state.context;
-  const ef = ctx.series.eficiencia[idx];
-  const m = ctx.series.matriculas[idx];
+// Linha do ano + conectivo causal (A4), montados juntos. Antes o conectivo
+// relia o valor do texto para anexar a 2a linha - e o a-text ainda devolvia o
+// valor anterior: ao trocar de ano, a 1a linha continuava com os numeros do
+// ano de entrada (2024) enquanto o seletor mostrava outro ano.
+function compReadoutText(ctx, idx) {
+  const ano = DADOS.anos[idx];
   const c = ctx.series.contagens;
-  if (m > 0 && ef != null && c) {
-    const pe = (c.evadidos[idx] / m) * 100;
-    const current = dom.compReadout.getAttribute("text")?.value || dom.compReadout.getAttribute("value") || "";
-    const base = current.split("\n")[0];
-    // Frase curta (1 linha): o readout fica com 2 linhas no maximo e nao encosta
-    // nos rotulos de ano acima nem nos controles abaixo.
-    const connective = `\nFio causal: ${fmt(pe)}% de evasao puxam a eficiencia para ${fmt(ef)}%.`;
-    dom.compReadout.setAttribute("value", base + connective);
-  }
+  const m = ctx.series.matriculas[idx];
+  if (!(m > 0)) return `${ano}: sem dados`;
+  const linha1 = `${ano}: ${fmtInt(c.concluidos[idx])} ${COMP_NOUN.concluidos} · ${fmtInt(c.retidos[idx])} ${COMP_NOUN.retidos} · ${fmtInt(c.evadidos[idx])} ${COMP_NOUN.evadidos}`;
+  const ef = ctx.series.eficiencia[idx];
+  if (ef == null) return linha1;
+  // Frase curta (1 linha): o readout fica com 2 linhas no maximo.
+  const pe = (c.evadidos[idx] / m) * 100;
+  return `${linha1}\nFio causal: ${fmt(pe)}% de evasao puxam a eficiencia para ${fmt(ef)}%.`;
 }
 
 // ----------------------------------------------------------------------------
@@ -1522,7 +1655,8 @@ function enterTimeline(key, skipGuided) {
   setEntityVisible(dom.contextKicker, false);
   setEntityVisible(dom.contextTitle, false);
   setEntityVisible(dom.contextLead, false);
-  crumb("Mapa", rotuloContexto(state.context), "Indicadores", indicador.label);
+  crumb("Mapa", rotuloTrilha(state.context), "Indicadores", indicador.label);
+  dom.hudTitle.textContent = rotuloTrilha(state.context);
   setNota("timeline");
   setChartColor(indicador.cor);
   animateViewIn(dom.timelineView);
@@ -1531,6 +1665,7 @@ function enterTimeline(key, skipGuided) {
   buildChartGrid();
   buildTimeline();
   applyCompare();
+  atualizarLegendaComparacao();
   updateCompareButton();
   updateNarrativePanel();
   updateAmbientDrone();
@@ -1543,8 +1678,8 @@ function enterTimeline(key, skipGuided) {
 }
 
 function setChartColor(cor) {
-  dom.chartGlow.setAttribute("material", `color: ${cor}; opacity: 0.06; transparent: true; shader: flat; side: double`);
-  dom.focusBand.setAttribute("material", `color: ${cor}; opacity: 0.14; transparent: true; shader: flat`);
+  dom.chartGlow.setAttribute("material", `color: ${cor}; opacity: 0.06; transparent: true; shader: flat; side: double; depthWrite: false`);
+  dom.focusBand.setAttribute("material", `color: ${cor}; opacity: 0.14; transparent: true; shader: flat; depthWrite: false`);
   dom.stageSpot.setAttribute("light", `type: point; color: ${cor}; intensity: 1.2; distance: 12`);
 }
 
@@ -1561,7 +1696,7 @@ function buildChartGrid() {
     });
     const rotulo = el("a-text", {
       value: `${pct}%`, position: `${round2(CHART.x0 - 0.32)} ${round2(y)} ${CHART.z - 0.03}`,
-      width: 1.6, align: "right", anchor: "right", color: "#7d93b4", font: "kelsonsans",
+      width: 1.6, align: "right", anchor: "right", color: "#7d93b4", ...FONTE_3D,
     });
     dom.chartGrid.append(linha, rotulo);
     applyPendingTransforms(linha);
@@ -1601,7 +1736,7 @@ function buildTimeline() {
       const bar = el("a-box", {
         class: "bar-visual clickable timeline-clickable", width: 0.36, depth: 0.18, height: h,
         position: `${xFor(i)} ${CHART.baseY + h / 2} ${CHART.z - 0.02}`,
-        material: `color: ${indicador.cor}; opacity: 0.18; transparent: true; shader: flat`,
+        material: `color: ${indicador.cor}; opacity: 0.18; transparent: true; shader: flat; depthWrite: false`,
       });
       bar.dataset.idx = String(i);
       bar.addEventListener("click", () => selectYear(i));
@@ -1612,7 +1747,7 @@ function buildTimeline() {
       const hit = el("a-box", {
         class: "clickable timeline-clickable", width: 0.36, depth: 0.18, height: 0.4,
         position: `${xFor(i)} ${CHART.baseY + 0.2} ${CHART.z - 0.02}`,
-        material: "color: #ffffff; opacity: 0.001; transparent: true",
+        material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
       });
       hit.dataset.idx = String(i);
       hit.addEventListener("click", () => selectYear(i));
@@ -1621,8 +1756,8 @@ function buildTimeline() {
     }
 
     const tick = el("a-text", {
-      value: String(ano), position: `${xFor(i)} ${CHART.baseY - 0.22} ${CHART.z}`,
-      width: 1.7, align: "center", color: "#90a6c6", font: "kelsonsans",
+      value: String(ano), position: `${xFor(i)} ${round2(CHART.baseY - 0.23)} ${CHART.z}`,
+      width: 1.7, align: "center", color: "#90a6c6", ...FONTE_3D,
     });
     dom.yearTicks.appendChild(tick);
     applyPendingTransforms(tick);
@@ -1649,12 +1784,23 @@ function buildTimeline() {
     applyPendingTransforms(marker);
   });
 
-  // Callouts de pico/vale (com linha-guia).
-  buildCallout(peakIdx, serie, indicador, indicador.sentido === "negativo");
-  buildCallout(valleyIdx, serie, indicador, indicador.sentido !== "negativo");
-
-  // Anotacoes de eventos de contexto (ex.: pandemia de 2020).
+  // Anotacoes de eventos de contexto (ex.: pandemia de 2020) - antes dos
+  // callouts, que precisam desviar da etiqueta.
+  // Canto superior esquerdo do painel: no desktop ele fica por baixo da coluna
+  // do HUD 2D (painel + legenda da comparacao) em janelas de notebook. Cartoes
+  // e o rotulo do ano nao vao para la.
+  graficoObst = [[CHART.x0 - 0.3, 2.55, CHART.x0 + 0.65, CHART.topoPainel + 0.2]];
+  calloutRects = [];
   buildEventos();
+
+  // Callouts de pico/vale (com linha-guia), posicionados para nao cobrir a
+  // linha, os pontos, a comparacao, a etiqueta do evento nem um ao outro.
+  const crit = indicador.sentido === "negativo" ? peakIdx : valleyIdx;
+  const bom = indicador.sentido === "negativo" ? valleyIdx : peakIdx;
+  const cartoes = [{ idx: crit, isCritico: true }];
+  if (bom !== crit) cartoes.push({ idx: bom, isCritico: false });
+  const lugares = posicionarCallouts(cartoes.filter((c) => c.idx >= 0 && serie[c.idx] != null), serie);
+  cartoes.forEach((c) => buildCallout(c.idx, serie, indicador, c.isCritico, lugares[c.idx]));
 }
 
 function buildEventos() {
@@ -1670,21 +1816,24 @@ function buildEventos() {
       position: `${x} ${CHART.baseY + CHART.maxH / 2} ${CHART.z - 0.01}`,
       material: `color: ${cor}; opacity: 0.3; transparent: true; shader: flat`,
     });
-    // Etiqueta no topo do grafico.
-    const tagY = yFor(100) + 0.18;
+    // Etiqueta entre o topo do grafico (100%) e o topo do painel. Antes ela
+    // passava do painel e, na tela, encostava na 2a linha do texto da narrativa.
+    const tagW = 1.2, tagH = 0.2;
+    const tagY = round2(yFor(100) + 0.04 + tagH / 2);
     const tag = el("a-entity", { position: `${x} ${tagY} ${CHART.z + 0.04}` });
     const plate = el("a-plane", {
-      width: 1.45, height: 0.28,
+      width: tagW, height: tagH,
       material: `color: #1a2336; opacity: 0.95; transparent: true; shader: flat`,
     });
     const barra = el("a-plane", {
-      width: 1.45, height: 0.04, position: "0 0.16 0.005",
+      width: tagW, height: 0.03, position: `0 ${round2(tagH / 2 - 0.015)} 0.005`,
       material: `color: ${cor}; shader: flat`,
     });
     const txt = el("a-text", {
-      value: `${ev.ano} · Pandemia`, position: "0 0 0.01", width: 2.3,
-      align: "center", color: "#dde6f7", font: "kelsonsans",
+      value: `${ev.ano} · Pandemia`, position: "0 -0.01 0.01", width: 1.9,
+      align: "center", color: "#dde6f7", ...FONTE_3D, "data-linha-unica": "1",
     });
+    graficoObst.push([x - tagW / 2, tagY - tagH / 2, x + tagW / 2, tagY + tagH / 2]);
     tag.append(plate, barra, txt);
     dom.annotations.append(guia, tag);
     applyPendingTransforms(guia);
@@ -1692,8 +1841,136 @@ function buildEventos() {
   });
 }
 
-function buildCallout(idx, serie, indicador, isCritico) {
-  if (idx < 0 || serie[idx] == null) return;
+// ----------------------------------------------------------------------------
+// Posicionador de cartoes do grafico - porte do posicionarCartoes da versao
+// minimalista. Procura, perto do ponto, um lugar dentro do painel do grafico
+// que nao cubra a linha de tendencia, os pontos, a linha de comparacao, a
+// etiqueta do evento nem outro cartao. Qualquer pedaco de linha sob o cartao
+// custa mais que as preferencias de lado e de distancia: o cartao so cobre a
+// linha se nao houver outro lugar. Antes o card ia sempre ~1 m para o lado e
+// 0,55 m para cima: cobria a linha e os pontos, e o de pico e o de vale se
+// encavalavam quando caiam em anos vizinhos.
+// ----------------------------------------------------------------------------
+let graficoObst = []; // retangulos ocupados (etiqueta do evento, cartoes): [x0, y0, x1, y1]
+let calloutRects = [];
+
+function geometriaDoGrafico() {
+  const pts = pontosDe(state.context.series[state.indicatorKey]).filter(Boolean);
+  const seg = (lista) => lista.slice(1).map((p, k) => [lista[k], p]);
+  const segs = seg(pts).map((s2) => ({ s: s2, peso: 1 }));
+  // raio do halo do marcador em foco (0,13 x 1,45) + folga
+  const marcas = pts.map((p) => ({ x: p.x, y: p.y, r: 0.21, i: p.i }));
+  // A comparacao pode ser ligada depois: os cartoes ja desviam dela.
+  const cmp = state.compareContext ? pontosDe(state.compareContext.series[state.indicatorKey]).filter(Boolean) : [];
+  seg(cmp).forEach((s2) => segs.push({ s: s2, peso: 0.75 }));
+  cmp.forEach((p) => marcas.push({ x: p.x, y: p.y, r: 0.07, i: -1 }));
+  return { segs, marcas };
+}
+
+function posicionarNoGrafico(alvo, geo, obst) {
+  const G = {
+    xMin: CHART.x0 - 0.1, // rotulos de % terminam em x0 - 0,32 (o cartao, mais perto do olho, "cresce" na tela)
+    xMax: CHART.x1 + 0.6,
+    yMin: CHART.baseY + 0.03,
+    yMax: CHART.topoPainel - 0.04,
+    margem: 0.04, // a linha tem espessura
+  };
+  const lim = (v, a, b) => Math.max(a, Math.min(b, v));
+  // comprimento de um segmento dentro de um retangulo (Liang-Barsky)
+  const dentro = (s2, r) => {
+    const [a, b] = s2;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    let t0 = 0, t1 = 1;
+    const p = [-dx, dx, -dy, dy];
+    const q = [a.x - r[0], r[2] - a.x, a.y - r[1], r[3] - a.y];
+    for (let k = 0; k < 4; k += 1) {
+      if (p[k] === 0) {
+        if (q[k] < 0) return 0;
+      } else {
+        const t = q[k] / p[k];
+        if (p[k] < 0) t0 = Math.max(t0, t);
+        else t1 = Math.min(t1, t);
+      }
+    }
+    return t1 > t0 ? (t1 - t0) * Math.hypot(dx, dy) : 0;
+  };
+  const tocaPonto = (p, r) => {
+    const cx = lim(p.x, r[0], r[2]), cy = lim(p.y, r[1], r[3]);
+    return Math.hypot(p.x - cx, p.y - cy) < p.r;
+  };
+  const cruza = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const { w, h } = alvo;
+  let melhor = null;
+  [alvo.pref, -alvo.pref].forEach((lado) => [1, 1.6, 2.3, 3.1, 4, 5].forEach((longe) => {
+    [0, -0.3, 0.3, -0.6, 0.6, -1, 1, -1.5, 1.5, -2, 2, -3, 3, -4, 4, -5, 5].forEach((f) => {
+      const x = lim(alvo.x + f * w, G.xMin + w / 2, G.xMax - w / 2);
+      const yIdeal = alvo.y + lado * (h / 2 + 0.16) * longe;
+      const y = lim(yIdeal, G.yMin + h / 2, G.yMax - h / 2);
+      const r = [x - w / 2, y - h / 2, x + w / 2, y + h / 2];
+      const m = G.margem;
+      const rm = [r[0] - m, r[1] - m, r[2] + m, r[3] + m];
+      let custo = 0;
+      geo.segs.forEach((sg) => {
+        const d = dentro(sg.s, rm);
+        if (d > 0) custo += sg.peso * (2 + (4 * d) / w);
+      });
+      geo.marcas.forEach((p) => {
+        if (tocaPonto(p, rm)) custo += p.i === alvo.proprio ? 10 : 5;
+      });
+      obst.forEach((o) => {
+        if (cruza(o, rm)) custo += 50;
+      });
+      // Longe do ponto custa: aqui o cartao tem linha-guia, e uma guia comprida
+      // atravessando o grafico vira mais um risco por cima de tudo. Cada trecho
+      // da serie que a guia cruza tambem custa.
+      const gx = lim(alvo.x, r[0], r[2]), gy = lim(alvo.y, r[1], r[3]);
+      const guia = [{ x: alvo.x, y: alvo.y }, { x: gx, y: gy }];
+      const cruzaGuia = (a, b) => {
+        const d = (p, q, t) => (q.x - p.x) * (t.y - p.y) - (q.y - p.y) * (t.x - p.x);
+        return d(a[0], a[1], b[0]) * d(a[0], a[1], b[1]) < 0 && d(b[0], b[1], a[0]) * d(b[0], b[1], a[1]) < 0;
+      };
+      geo.segs.forEach((sg) => {
+        if (cruzaGuia(guia, sg.s)) custo += 1.2 * sg.peso;
+      });
+      custo += (1.2 * Math.abs(x - alvo.x)) / w + (0.3 * Math.abs(y - yIdeal)) / h + (lado !== alvo.pref ? 0.25 : 0) + (longe - 1) * 0.4;
+      if (!melhor || custo < melhor.custo - 1e-9) melhor = { x, y, r, custo };
+    });
+  }));
+  return melhor;
+}
+
+const CALLOUT = { w: 1.4, h: 0.46 };
+
+// Os dois cartoes juntos: tenta as duas ordens (pico primeiro, vale primeiro)
+// e fica com a de menor custo total. Um cartao so, colocado primeiro no meio
+// da altura, podia nao deixar lugar para o outro (IFRR, retencao).
+function posicionarCallouts(cartoes, serie) {
+  const geo = geometriaDoGrafico();
+  const validos = serie.filter((v) => v != null);
+  const alvo = (idx) => {
+    // o maior valor prefere ficar acima do ponto; o menor, abaixo
+    const pref = serie[idx] >= Math.max(...validos) ? 1 : serie[idx] <= Math.min(...validos) ? -1 : 1;
+    return { x: xFor(idx), y: yFor(serie[idx]), w: CALLOUT.w, h: CALLOUT.h, pref, proprio: idx };
+  };
+  const ordens = cartoes.length > 1 ? [cartoes, [...cartoes].reverse()] : [cartoes];
+  let melhor = null;
+  ordens.forEach((ordem) => {
+    const obst = graficoObst.slice();
+    const res = {};
+    let total = 0;
+    ordem.forEach((c) => {
+      const l = posicionarNoGrafico(alvo(c.idx), geo, obst);
+      obst.push(l.r);
+      res[c.idx] = l;
+      total += l.custo;
+    });
+    if (!melhor || total < melhor.total - 1e-9) melhor = { res, total };
+  });
+  return melhor ? melhor.res : {};
+}
+
+function buildCallout(idx, serie, indicador, isCritico, lugar) {
+  if (idx < 0 || serie[idx] == null || !lugar) return;
   const x = xFor(idx);
   const y = yFor(serie[idx]);
   const cor = isCritico ? "#ffb454" : "#65e4b8";
@@ -1701,25 +1978,27 @@ function buildCallout(idx, serie, indicador, isCritico) {
     ? indicador.sentido === "negativo" ? "Pico critico" : "Ponto critico"
     : "Melhor ano";
 
-  // Card deslocado para dentro do grafico, acima do ponto.
-  const lado = x <= 0 ? 1 : -1;
-  const cardX = x + lado * 0.95;
-  const cardY = Math.min(yFor(100) - 0.1, y + 0.55);
+  const cardX = round2(lugar.x);
+  const cardY = round2(lugar.y);
+  graficoObst.push(lugar.r);
+  calloutRects.push(lugar.r);
 
   const grupo = el("a-entity", {});
   grupo.dataset.callout = idx === 0 ? "0" : String(idx);
 
-  // Linha-guia do ponto ao card.
-  const dx = cardX - x;
-  const dy = cardY - y;
-  const len = Math.hypot(dx, dy);
-  const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const guia = el("a-box", {
-    width: len, height: 0.012, depth: 0.01,
-    position: `${(x + cardX) / 2} ${(y + cardY) / 2} ${CHART.z + 0.03}`,
-    rotation: `0 0 ${round2(ang)}`,
-    material: `color: ${cor}; opacity: 0.7; transparent: true; shader: flat`,
-  });
+  // Linha-guia do ponto ate a borda mais proxima do card (so se ele ficou longe).
+  const bx = Math.max(lugar.r[0], Math.min(lugar.r[2], x));
+  const by = Math.max(lugar.r[1], Math.min(lugar.r[3], y));
+  const len = Math.hypot(bx - x, by - y);
+  if (len > 0.14) {
+    const ang = (Math.atan2(by - y, bx - x) * 180) / Math.PI;
+    grupo.appendChild(el("a-box", {
+      width: round2(len), height: 0.012, depth: 0.01,
+      position: `${round2((x + bx) / 2)} ${round2((y + by) / 2)} ${CHART.z + 0.03}`,
+      rotation: `0 0 ${round2(ang)}`,
+      material: `color: ${cor}; opacity: 0.7; transparent: true; shader: flat`,
+    }));
+  }
   // Linha interpretativa, calculada dos dados (nao fixa): vs. media nacional ou vs. inicio da serie.
   const valorAno = serie[idx];
   const bserie = DADOS.brasil.series[indicador.key];
@@ -1735,28 +2014,32 @@ function buildCallout(idx, serie, indicador, isCritico) {
     }
   }
 
+  // Cartao a frente dos marcadores (z + 0,2): nem a esfera do ano em foco
+  // (aumentada 1,45x) fura o cartao.
+  const zc = CHART.z + 0.2;
+  const xt = round2(cardX - CALLOUT.w / 2 + 0.1);
   const card = el("a-plane", {
-    width: 1.7, height: 0.66, position: `${cardX} ${cardY} ${CHART.z + 0.05}`,
+    width: CALLOUT.w, height: CALLOUT.h, position: `${cardX} ${cardY} ${zc}`,
     material: `color: #0c1426; opacity: 0.95; transparent: true; shader: flat`,
   });
   const barra = el("a-plane", {
-    width: 0.05, height: 0.66, position: `${cardX - 0.82} ${cardY} ${CHART.z + 0.06}`,
+    width: 0.05, height: CALLOUT.h, position: `${round2(cardX - CALLOUT.w / 2 + 0.025)} ${cardY} ${zc + 0.005}`,
     material: `color: ${cor}; shader: flat`,
   });
   const titulo = el("a-text", {
-    value: rotulo, position: `${cardX - 0.73} ${cardY + 0.2} ${CHART.z + 0.06}`,
-    width: 2.2, align: "left", anchor: "left", color: "#ffffff", font: "kelsonsans",
+    value: rotulo, position: `${xt} ${round2(cardY + 0.14)} ${zc + 0.01}`,
+    width: 1.8, align: "left", anchor: "left", color: "#ffffff", ...FONTE_3D, "data-linha-unica": "1",
   });
   const valor = el("a-text", {
     value: `${fmt(serie[idx])}% em ${DADOS.anos[idx]}`,
-    position: `${cardX - 0.73} ${cardY - 0.02} ${CHART.z + 0.06}`,
-    width: 2.2, align: "left", anchor: "left", color: "#cfe0f4", font: "kelsonsans",
+    position: `${xt} ${round2(cardY - 0.01)} ${zc + 0.01}`,
+    width: 1.8, align: "left", anchor: "left", color: "#cfe0f4", ...FONTE_3D, "data-linha-unica": "1",
   });
-  grupo.append(guia, card, barra, titulo, valor);
+  grupo.append(card, barra, titulo, valor);
   if (interp) {
     grupo.appendChild(el("a-text", {
-      value: interp, position: `${cardX - 0.73} ${cardY - 0.22} ${CHART.z + 0.06}`,
-      width: 2.0, align: "left", anchor: "left", color: cor, font: "kelsonsans",
+      value: interp, position: `${xt} ${round2(cardY - 0.155)} ${zc + 0.01}`,
+      width: 1.6, align: "left", anchor: "left", color: cor, ...FONTE_3D, "data-linha-unica": "1",
     }));
   }
   dom.annotations.appendChild(grupo);
@@ -1862,15 +2145,31 @@ function updateYear() {
     setVectorAttribute(dom.focusBand, "position", `${x} ${CHART.baseY + CHART.maxH / 2} ${CHART.z - 0.015}`);
   }
 
+  // Rotulo do ano em foco: no lugar livre mais perto do ponto (mesmo
+  // posicionador dos cartoes), sem cobrir linha, pontos, cartoes, a etiqueta
+  // do evento nem os rotulos de % do eixo. Antes ficava fixo 0,32 acima do
+  // ponto e caia em cima do cartao "Melhor ano", do "75%" do eixo (em 2017)
+  // e dos pontos da comparacao.
   setEntityVisible(dom.valueReadout, true);
-  const ry = v != null ? yFor(v) + 0.32 : CHART.baseY + 0.4;
-  setVectorAttribute(dom.valueReadout, "position", `${x} ${ry} ${CHART.z + 0.07}`);
-  dom.valueReadout.setAttribute("value", v == null ? `${ano}: s/ dados` : `${ano}  ${fmt(v)}%`);
+  const textoLeitura = v == null ? `${ano}: s/ dados` : `${ano}  ${fmt(v)}%`;
+  dom.valueReadout.setAttribute("value", textoLeitura);
+  const geo = geometriaDoGrafico();
+  // a guia vertical do evento tambem e obstaculo (o texto nao tem fundo)
+  const guiasEvento = (DADOS.eventos || []).map((ev) => DADOS.anos.indexOf(ev.ano)).filter((i) => i >= 0)
+    .map((i) => ({ s: [{ x: xFor(i), y: CHART.baseY }, { x: xFor(i), y: yFor(100) }], peso: 1 }));
+  const lugar = posicionarNoGrafico(
+    { x, y: v != null ? yFor(v) : CHART.baseY, w: 0.062 * textoLeitura.length + 0.08, h: 0.19, pref: 1, proprio: idx },
+    { segs: geo.segs.concat(guiasEvento), marcas: geo.marcas },
+    graficoObst
+  );
+  // z + 0,16: a frente das esferas dos marcadores (so a do ano em foco, que
+  // ele evita, chega a + 0,15).
+  setVectorAttribute(dom.valueReadout, "position", `${round2(lugar.x)} ${round2(lugar.y)} ${round2(CHART.z + 0.16)}`);
 
   // Realce do marcador selecionado.
   dom.markers.querySelectorAll("[data-idx]").forEach((m) => {
     const on = Number(m.dataset.idx) === idx;
-    m.setAttribute("animation__f", `property: scale; to: ${on ? "1.7 1.7 1.7" : "1 1 1"}; dur: 180; easing: easeOutQuad`);
+    m.setAttribute("animation__f", `property: scale; to: ${on ? "1.45 1.45 1.45" : "1 1 1"}; dur: 180; easing: easeOutQuad`);
   });
 
   // Linha do ano: % + numeros absolutos + variacao + comparacao.
@@ -2051,6 +2350,24 @@ function updateCompareButton() {
   );
 }
 
+function atualizarLegendaComparacao() {
+  const ativa = Boolean(state.compareOn && state.context && state.compareContext);
+  if (dom.hudLegend) dom.hudLegend.hidden = !ativa;
+  if (dom.compareLegend3d) setEntityVisible(dom.compareLegend3d, ativa);
+  if (!ativa) return;
+
+  const nomeA = rotuloCurto(state.context);
+  const nomeB = rotuloCurto(state.compareContext);
+  const ind = state.indicatorKey ? indicadorByKey(state.indicatorKey) : null;
+  const corA = ind ? ind.cor : "#4cc9f0";
+
+  if (dom.legendPrimary) dom.legendPrimary.textContent = nomeA;
+  if (dom.legendCompare) dom.legendCompare.textContent = nomeB;
+  if (dom.compareLegendDotPrimary) dom.compareLegendDotPrimary.setAttribute("material", `color: ${corA}; shader: flat`);
+  if (dom.compareLegendPrimary3d) textoUmaLinha(dom.compareLegendPrimary3d, nomeA, 24);
+  if (dom.compareLegendCompare3d) textoUmaLinha(dom.compareLegendCompare3d, nomeB, 24);
+}
+
 function toggleCompare() {
   if (state.guided) return;
   if (!state.compareContext) {
@@ -2061,11 +2378,7 @@ function toggleCompare() {
   updateCompareButton();
   applyCompare();
   updateYear();
-  dom.hudLegend.hidden = !state.compareOn;
-  if (state.compareOn) {
-    dom.legendPrimary.textContent = rotuloCurto(state.context);
-    dom.legendCompare.textContent = rotuloCurto(state.compareContext);
-  }
+  atualizarLegendaComparacao();
 }
 
 function toggleNarration() {
@@ -2093,9 +2406,20 @@ function stopNarration() {
   setCaption("");
 }
 
-function setCaption(text) {
-  if (dom.captionText) dom.captionText.setAttribute("value", text);
-  if (dom.captionPanel) setEntityVisible(dom.captionPanel, text.length > 0);
+// Legenda: em VR, a 3D presa a cabeca (#captionPanel); no desktop, a barra
+// 2D do rodape (#legenda2d). Como o #vrHud fica ancorado no mundo (nao mais
+// colado na camera abaixo da legenda), ele nao colide com as legendas.
+let legendaAtual = "";
+function setCaption(text, vrForcado) {
+  legendaAtual = text;
+  const emVR = vrForcado != null ? vrForcado : !!(dom.scene && dom.scene.is && dom.scene.is("vr-mode"));
+  const tem = text.length > 0;
+  if (dom.captionText) dom.captionText.setAttribute("value", emVR ? text : "");
+  if (dom.captionPanel) setEntityVisible(dom.captionPanel, emVR && tem);
+  if (dom.legenda2d) {
+    dom.legenda2d.textContent = emVR ? "" : text;
+    dom.legenda2d.hidden = emVR || !tem;
+  }
 }
 
 // A legenda e o canal garantido; a voz e um extra. No navegador do Quest a
@@ -2291,7 +2615,7 @@ async function startTour(tourId) {
     resetCameraRig();
     setEntityVisible(dom.selectionWorld, false);
     setEntityVisible(dom.explorationWorld, true);
-    dom.hudLegend.hidden = true;
+    atualizarLegendaComparacao();
     dom.compLegend.hidden = true;
 
     // Atualizar a cor da barra HUD com a cor da historia.
@@ -2385,7 +2709,7 @@ async function tourGoTo(n, skipFade) {
           setEntityVisible(dom.contextTitle, true);
           setEntityVisible(dom.contextLead, true);
           dom.contextKicker.setAttribute("value", "RELACAO ENTRE INDICADORES");
-          dom.contextTitle.setAttribute("value", cena.manchete);
+          textoUmaLinha(dom.contextTitle, cena.manchete, 40);
           dom.contextLead.setAttribute("value", "Evasao, conclusao e retencao determinam a eficiencia academica.");
           showIndicatorLinks(false);
         }
@@ -2460,12 +2784,12 @@ async function endTour() {
     // para evitar clique-fantasma no botao invisivel "Pular introducao".
     setSubtreeClickable(dom.ctrlSkip, false);
     refreshRaycasters();
-    crumb("Mapa", rotuloContexto(state.context), "Indicadores", indicadorByKey(state.indicatorKey).label);
+    crumb("Mapa", rotuloTrilha(state.context), "Indicadores", indicadorByKey(state.indicatorKey).label);
   } else {
     backToIndicators();
   }
 
-  dom.hudTitle.textContent = rotuloContexto(state.context);
+  dom.hudTitle.textContent = rotuloTrilha(state.context);
   dom.hudSubtitle.textContent = "Tour concluido — explore livremente.";
 }
 
@@ -2497,7 +2821,7 @@ function buildGuidedQuestions(cena) {
       material: "color: #1a2b4c; roughness: 0.4; emissive: #2f5d8a; emissiveIntensity: 0.2"
     });
     const text = el("a-text", {
-      value: p.texto, position: "0 0 0.05", width: 2.6, align: "center", color: "#cfe9ff", font: "kelsonsans"
+      value: p.texto, position: "0 0 0.05", width: 2.6, align: "center", color: "#cfe9ff", ...FONTE_3D
     });
     
     bg.addEventListener("mouseenter", () => setVectorAttribute(qEntity, "scale", "1.05 1.05 1.05"));
@@ -2715,28 +3039,26 @@ function buildTourGallery() {
       width: 1.7, height: 0.04, position: "0 0.42 0.05",
       material: `color: ${tour.cor}; opacity: 0.9; transparent: true; shader: flat`,
     });
-    const icone = el("a-text", {
-      value: tour.icone, position: "-0.7 0.22 0.06",
-      width: 2.0, align: "left", anchor: "left", color: tour.cor, font: "kelsonsans",
-    });
+    // (O icone - ◉ ▲ ⇄ - saiu: nenhuma das fontes tem esses glifos, entao ele
+    // nunca apareceu; o titulo segue centrado no card.)
     const titulo = el("a-text", {
       value: tour.titulo, position: "0 0.22 0.06",
-      width: 1.9, align: "center", color: "#ffffff", font: "kelsonsans",
+      width: 1.9, align: "center", color: "#ffffff", ...FONTE_3D,
     });
     const desc = el("a-text", {
       value: tour.descricao, position: "0 -0.04 0.06",
-      width: 1.8, align: "center", color: "#b0bfd6", font: "kelsonsans", "wrap-count": 28,
+      width: 1.8, align: "center", color: "#b0bfd6", ...FONTE_3D, "wrap-count": 28,
     });
     const cenas = el("a-text", {
       value: `${tour.cenas.length} cenas`, position: "0 -0.32 0.06",
-      width: 1.5, align: "center", color: tour.cor, font: "kelsonsans",
+      width: 1.5, align: "center", color: tour.cor, ...FONTE_3D,
     });
     const hit = el("a-box", {
       class: "hit clickable selection-clickable",
       width: 1.95, height: 1.0, depth: 0.18,
-      material: "color: #ffffff; opacity: 0.001; transparent: true",
+      material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false",
     });
-    card.append(bg, accent, icone, titulo, desc, cenas, hit);
+    card.append(bg, accent, titulo, desc, cenas, hit);
     dom.tourGallery.appendChild(card);
     applyPendingTransforms(card);
 
@@ -2765,13 +3087,13 @@ function backToIndicators() {
   state.stage = "indicators";
   state.compareOn = false;
   dom.ctrlCompareLabel.setAttribute("value", "Comparar");
-  dom.hudLegend.hidden = true;
+  atualizarLegendaComparacao();
   dom.compLegend.hidden = true;
   setEntityVisible(dom.timelineView, false);
   setEntityVisible(dom.composicaoView, false);
   setEntityVisible(dom.indicatorView, true);
   populateIndicators(state.context);
-  dom.hudTitle.textContent = rotuloContexto(state.context);
+  dom.hudTitle.textContent = rotuloTrilha(state.context);
   dom.hudSubtitle.textContent = "Escolha um indicador para ver a linha do tempo";
   setInteractionMode("indicators");
 }
@@ -2807,7 +3129,8 @@ async function returnToSelection() {
     hideInfoPanelNow();
     setEntityVisible(dom.timelineView, false);
     setEntityVisible(dom.composicaoView, false);
-    dom.hudLegend.hidden = true;
+    state.compareOn = false;
+    atualizarLegendaComparacao();
     dom.compLegend.hidden = true;
 
     state.stage = "selection";
@@ -2906,7 +3229,8 @@ async function enterDrill(region) {
     setEntityVisible(dom.timelineView, false);
     setEntityVisible(dom.composicaoView, false);
     setEntityVisible(dom.multiplosView, false);
-    dom.hudLegend.hidden = true;
+    state.compareOn = false;
+    atualizarLegendaComparacao();
     dom.compLegend.hidden = true;
 
     state.parentRegion = null;
@@ -2932,6 +3256,7 @@ function setInteractionMode(mode) {
   toggleClickable(".multiplos-clickable", mode === "multiplos");
   toggleClickable(".exploration-clickable", mode === "indicators" || mode === "timeline" || mode === "composicao" || mode === "tour" || mode === "multiplos");
   toggleClickable(".minimap-clickable", mode === "indicators" || mode === "timeline" || mode === "composicao" || mode === "tour");
+  toggleClickable(".vr-hud-clickable", Boolean(dom.vrHud && isEntityVisible(dom.vrHud)));
   refreshRaycasters();
 }
 
@@ -2964,56 +3289,263 @@ function setSubtreeClickable(root, enabled) {
 }
 
 // ----------------------------------------------------------------------------
-// VR / gaze.
+// VR / Meta Quest 3: HUD no mundo, altura sentado/em pe, atalhos Touch Plus,
+// feedback haptico, laser unico e instrucoes adaptativas.
 // ----------------------------------------------------------------------------
+
+const ALTURA_OLHO_ALVO = 1.6;
+const INSTRUCOES_ENTRADA = {
+  desktop: {
+    mapTitle: "Aponte para uma regiao; clique para explorar",
+    contextLead: "Passe o mouse para entender cada indicador. Clique para abrir a linha do tempo.",
+    infoHint: "Clique para ver a linha do tempo",
+    roomSign: "Desktop: aponte com o mouse e clique. Em VR: controles Touch, maos ou olhar.",
+  },
+  controle: {
+    mapTitle: "Aponte o laser para uma regiao; aperte o gatilho",
+    contextLead: "Aponte para entender cada indicador. Aperte o gatilho para abrir a linha do tempo.",
+    infoHint: "Aperte o gatilho para ver a linha do tempo",
+    roomSign: "Gatilho: selecionar · B/Y: voltar · Analogico: ano/cena · X: Como ler",
+  },
+  mao: {
+    mapTitle: "Olhe para uma regiao; faca pinca para explorar",
+    contextLead: "Olhe para cada indicador e faca pinca (palma para fora) para abrir a linha do tempo.",
+    infoHint: "Faca pinca (palma para fora) para ver a linha do tempo",
+    roomSign: "Mire com o olhar e faca pinca (palma para fora). Olhar parado nao clica.",
+  },
+  olhar: {
+    mapTitle: "Olhe para uma regiao e segure para explorar",
+    contextLead: "Olhe para um indicador para ler a definicao. Segure o olhar para abrir a linha do tempo.",
+    infoHint: "Segure o olhar para ver a linha do tempo",
+    roomSign: "Mire com o olhar e segure por 0,85 s para selecionar.",
+  },
+};
+
+function instrucoesDoModo() {
+  const emVR = Boolean((dom.scene && dom.scene.is && dom.scene.is("vr-mode")) || state.vrInput);
+  const chave = emVR ? (state.vrInput || "olhar") : "desktop";
+  return INSTRUCOES_ENTRADA[chave] || INSTRUCOES_ENTRADA.desktop;
+}
+
+function atualizarInstrucoesEntrada() {
+  const txt = instrucoesDoModo();
+  if (dom.mapTitle) dom.mapTitle.setAttribute("value", txt.mapTitle);
+  if (dom.infoHint) dom.infoHint.setAttribute("value", txt.infoHint);
+  if (dom.roomSignBody) dom.roomSignBody.setAttribute("value", txt.roomSign);
+  if (dom.contextLead && state.stage === "indicators" && !state.tourActive) {
+    dom.contextLead.setAttribute("value", txt.contextLead);
+  }
+}
+
+function bindVrHudControls() {
+  const notaHit = dom.vrNotaTab && dom.vrNotaTab.querySelector(".vr-hud-clickable");
+  if (notaHit) {
+    notaHit.addEventListener("click", () => toggleVrNota());
+    notaHit.addEventListener("mouseenter", () => dom.vrNotaTab.setAttribute("animation__h", "property: scale; to: 1.06 1.06 1.06; dur: 140"));
+    notaHit.addEventListener("mouseleave", () => dom.vrNotaTab.setAttribute("animation__h", "property: scale; to: 1 1 1; dur: 140"));
+  }
+  const altHit = dom.vrAlturaBtn && dom.vrAlturaBtn.querySelector(".vr-hud-clickable");
+  if (altHit) {
+    altHit.addEventListener("click", () => alternarAlturaVr());
+    altHit.addEventListener("mouseenter", () => dom.vrAlturaBtn.setAttribute("animation__h", "property: scale; to: 1.06 1.06 1.06; dur: 140"));
+    altHit.addEventListener("mouseleave", () => dom.vrAlturaBtn.setAttribute("animation__h", "property: scale; to: 1 1 1; dur: 140"));
+  }
+}
+
+function setVrNotaOpen(aberto) {
+  state.vrNotaOpen = Boolean(aberto);
+  if (dom.vrNotaCard) setEntityVisible(dom.vrNotaCard, state.vrNotaOpen);
+  if (dom.vrNotaTabLabel) dom.vrNotaTabLabel.setAttribute("value", state.vrNotaOpen ? "Como ler -" : "Como ler +");
+}
+
+function toggleVrNota() {
+  setVrNotaOpen(!state.vrNotaOpen);
+}
+
+function atualizarBotaoAlturaVr() {
+  if (dom.vrAlturaLabel) {
+    dom.vrAlturaLabel.setAttribute("value", state.seatedMode ? "Altura: Sentado" : "Altura: Em pe");
+  }
+}
+
+// Detecta automaticamente uso sentado ao entrar em VR: se a altura real dos olhos
+// (local-floor) estiver abaixo de 1,42 m, compensa o #cameraRig para trazer a
+// cena para a linha dos olhos (1,60 m), evitando forcar o pescoco para cima.
+function calibrarAlturaVr(tentativas = 6) {
+  const sessao = dom.scene && dom.scene.xrSession;
+  if (!sessao || !dom.camera || !dom.camera.object3D) return;
+  sessao.requestAnimationFrame(() => {
+    if (!dom.scene.is("vr-mode")) return;
+    const eyeY = dom.camera.object3D.position.y;
+    if (eyeY < 0.05 && tentativas > 0) {
+      calibrarAlturaVr(tentativas - 1);
+      return;
+    }
+    if (eyeY > 0.45 && eyeY < 1.42) {
+      state.vrHeightOffset = Math.max(0, Math.min(0.55, round2(ALTURA_OLHO_ALVO - eyeY)));
+      state.seatedMode = true;
+    } else {
+      state.vrHeightOffset = 0;
+      state.seatedMode = false;
+    }
+    resetCameraRig();
+    atualizarBotaoAlturaVr();
+  });
+}
+
+function alternarAlturaVr() {
+  if (state.seatedMode || state.vrHeightOffset > 0.02) {
+    state.vrHeightOffset = 0;
+    state.seatedMode = false;
+  } else {
+    const eyeY = dom.camera && dom.camera.object3D ? dom.camera.object3D.position.y : 0;
+    state.vrHeightOffset = eyeY > 0.45 && eyeY < 1.55
+      ? Math.max(0.1, Math.min(0.55, round2(ALTURA_OLHO_ALVO - eyeY)))
+      : 0.38;
+    state.seatedMode = true;
+  }
+  resetCameraRig();
+  atualizarBotaoAlturaVr();
+}
+
+function pulsarHaptica(lado, intensidade = 0.25, duracaoMs = 20) {
+  const sessao = dom.scene && dom.scene.xrSession;
+  if (!sessao || !sessao.inputSources) return;
+  const alvo = lado || state.activeHand || "right";
+  const fonte = Array.from(sessao.inputSources).find((f) => !f.hand && f.gamepad && f.handedness === alvo);
+  if (!fonte || !fonte.gamepad) return;
+  try {
+    const gp = fonte.gamepad;
+    if (gp.hapticActuators && gp.hapticActuators[0] && typeof gp.hapticActuators[0].pulse === "function") {
+      gp.hapticActuators[0].pulse(intensidade, duracaoMs);
+    } else if (gp.vibrationActuator && typeof gp.vibrationActuator.playEffect === "function") {
+      gp.vibrationActuator.playEffect("dual-rumble", {
+        startDelay: 0,
+        duration: duracaoMs,
+        weakMagnitude: intensidade * 0.7,
+        strongMagnitude: intensidade,
+      });
+    }
+  } catch (_) {
+    /* haptica opcional: ignorar em emuladores ou browsers sem suporte */
+  }
+}
+
+function voltarPorAtalho(lado) {
+  if (state.transitioning) return;
+  if (state.stage === "drill") {
+    pulsarHaptica(lado, 0.3, 24);
+    closeDrill();
+  } else if (state.stage !== "selection") {
+    pulsarHaptica(lado, 0.3, 24);
+    navigateBack();
+  }
+}
+
+function acaoRapidaBotaoA(lado) {
+  if (state.transitioning) return;
+  pulsarHaptica(lado, 0.26, 20);
+  if (state.stage === "timeline" && state.guided) {
+    skipGuided();
+  } else if (state.stage === "timeline") {
+    toggleNarration();
+  } else {
+    toggleVrNota();
+  }
+}
+
+function navegarPorAnalogico(dir, lado) {
+  if (state.transitioning || !dir) return;
+  if (state.tourActive) {
+    pulsarHaptica(lado, 0.22, 18);
+    if (dir > 0) tourNext();
+    else tourPrev();
+    return;
+  }
+  if (state.stage === "timeline" && !state.guided) {
+    pulsarHaptica(lado, 0.2, 16);
+    stepYear(dir);
+    return;
+  }
+  if (state.stage === "composicao") {
+    pulsarHaptica(lado, 0.2, 16);
+    stepCompYear(dir);
+    return;
+  }
+  if (state.stage === "multiplos" && DADOS && DADOS.indicadores) {
+    const idx = DADOS.indicadores.findIndex((ind) => ind.key === state.indicatorKey);
+    const prox = (idx + dir + DADOS.indicadores.length) % DADOS.indicadores.length;
+    pulsarHaptica(lado, 0.22, 18);
+    enterMultiplos(DADOS.indicadores[prox].key, true);
+  }
+}
+
+function ativarMaoControle(lado) {
+  if (lado !== "right" && lado !== "left") return;
+  if (state.activeHand === lado) return;
+  state.activeHand = lado;
+  atualizarModoEntrada();
+  pulsarHaptica(lado, 0.16, 15);
+}
 
 // Tres jeitos de selecionar em VR, decididos pelo que o Quest esta rastreando
 // AGORA (session.inputSources), e nao por eventos soltos de cada componente:
-//   - "controle": controles Touch -> laser + gatilho; o olhar nao seleciona.
+//   - "controle": controles Touch -> laser unico + gatilho + atalhos + haptica.
 //   - "mao":      hand tracking   -> o olhar mira, a PINCA seleciona (o
 //                 "select" do Quest vira clique no cursor de olhar); sem fuse,
 //                 para olhar parado nao selecionar sozinho.
 //   - "olhar":    nada rastreado  -> olhar + fuse (segurar 850 ms), como antes.
-// Antes: ao largar os controles, as maos apareciam, mas o laser ficava sem
-// controle e o olhar continuava desligado - nada mais era selecionavel.
 function bindVrCursorMode() {
   dom.scene.addEventListener("enter-vr", () => {
-    resetCameraRig();                       // em VR o headset define a altura (rig y=0)
+    state.vrHeightOffset = 0;
+    state.seatedMode = false;
+    resetCameraRig();                       // em VR o headset define a altura (rig y=0 + ajuste sentado)
     const sessao = dom.scene.xrSession;
     if (sessao && !sessao.__vrlabEntradas) {
       sessao.__vrlabEntradas = true;
       sessao.addEventListener("inputsourceschange", () => atualizarModoEntrada());
     }
+    if (dom.vrHud) setEntityVisible(dom.vrHud, true); // HUD 2D some no headset -> mostra o 3D no mundo
+    setVrNotaOpen(false);                             // recolhido por padrao para manter a vista livre
+    atualizarBotaoAlturaVr();
+    toggleClickable(".vr-hud-clickable", Boolean(dom.vrHud));
     atualizarModoEntrada(true);
-    if (dom.vrHud) setEntityVisible(dom.vrHud, true); // HUD 2D some no headset -> mostra o 3D
+    calibrarAlturaVr();
+    setCaption(legendaAtual, true); // legenda em andamento passa para a 3D
     dismissOnboarding(); // overlay 2D nao aparece no headset; a placa #roomSign cobre VR
   });
   dom.scene.addEventListener("exit-vr", () => {
     state.vrInput = null;
     state.usingControllers = false;
+    state.vrHeightOffset = 0;
+    state.seatedMode = false;
     setGazeFuse(false);
     resetCameraRig();                       // desktop: volta a altura fixa (rig y=1.6)
+    setVrNotaOpen(false);
     if (dom.vrHud) setEntityVisible(dom.vrHud, false); // desktop usa o HUD 2D
+    toggleClickable(".vr-hud-clickable", false);
+    setCaption(legendaAtual, false); // legenda em andamento volta para a barra 2D
     ["rightHand", "leftHand"].forEach((id) => {
       const h = document.getElementById(id);
-      if (h) { setEntityVisible(h, false); h.setAttribute("raycaster", "enabled", false); }
+      if (h) { setEntityVisible(h, false); h.setAttribute("raycaster", "enabled", false); h.setAttribute("raycaster", "showLine", false); }
     });
+    atualizarInstrucoesEntrada();
   });
   setGazeFuse(false);
   bindControllers();
   bindDragGuard();
 }
 
-// Altura do rig: em VR o WebXR ja fornece a altura real do headset (reference space
-// local-floor), entao o offset do rig deve ser 0; no desktop, mantemos 1.6 (altura dos olhos).
+// Altura do rig: em VR o WebXR ja fornece a altura real do headset (local-floor);
+// quando sentado, aplicamos vrHeightOffset para nivelar o olho a 1,6 m. No desktop, 1,6 m fixo.
 function resetCameraRig() {
   const emVR = dom.scene && dom.scene.is && dom.scene.is("vr-mode");
-  setVectorAttribute(dom.cameraRig, "position", emVR ? "0 0 0" : "0 1.6 0");
+  setVectorAttribute(dom.cameraRig, "position", emVR ? `0 ${round2(state.vrHeightOffset || 0)} 0` : "0 1.6 0");
 }
 
 // Le o que o Quest esta rastreando e aplica o modo de selecao (ver acima).
-// `entrando`: chamado pelo proprio enter-vr (o estado vr-mode pode ainda nao
-// estar marcado quando o evento e sintetico, como no smoke-test).
+// Com dois controles Touch conectados, ambos ficam visiveis, mas apenas a mao
+// ativa (`state.activeHand`) emite raio laser e raycaster (evita hovers da mao em repouso).
 function atualizarModoEntrada(entrando) {
   if (!entrando && !dom.scene.is("vr-mode")) return;
   const sessao = dom.scene.xrSession;
@@ -3024,30 +3556,91 @@ function atualizarModoEntrada(entrando) {
 
   state.vrInput = modo;
   state.usingControllers = modo === "controle";
+
+  if (modo === "controle") {
+    const temDir = controles.some((f) => f.handedness === "right");
+    const temEsq = controles.some((f) => f.handedness === "left");
+    if (state.activeHand === "right" && !temDir && temEsq) state.activeHand = "left";
+    else if (state.activeHand === "left" && !temEsq && temDir) state.activeHand = "right";
+  }
+
   ["rightHand", "leftHand"].forEach((id) => {
     const h = document.getElementById(id);
     if (!h) return;
     const lado = id === "rightHand" ? "right" : "left";
-    const ligado = modo === "controle" && controles.some((f) => f.handedness === lado);
-    setEntityVisible(h, ligado);
-    h.setAttribute("raycaster", "enabled", ligado);
+    const conectado = modo === "controle" && controles.some((f) => f.handedness === lado);
+    const laserAtivo = conectado && state.activeHand === lado;
+    setEntityVisible(h, conectado);
+    h.setAttribute("raycaster", "enabled", laserAtivo);
+    h.setAttribute("raycaster", "showLine", laserAtivo);
   });
+
   if (modo === "controle") setGazeFuse(false);
   else if (modo === "mao") setGazeMode(true, false);
   else setGazeFuse(true);
+  atualizarInstrucoesEntrada();
   refreshRaycasters();
 }
 
-// Os componentes do A-Frame tambem avisam (controllerconnected/disconnected);
-// eles so disparam a releitura - quem decide e atualizarModoEntrada. O
-// inputsourceschange da sessao cobre a troca controle <-> mao, que nem sempre
-// gera "controllerdisconnected" a tempo.
+// Eventos dos controles Touch Plus: conexao, troca de laser unico, atalhos
+// fisicos (B/Y voltar, X Como ler, A acao rapida, analogico mudar ano/cena,
+// clique do analogico alternar altura) e feedback haptico.
 function bindControllers() {
+  const stickEstado = { right: { travado: false, ultimoMs: 0 }, left: { travado: false, ultimoMs: 0 } };
+  const hoverHapticaMs = { right: 0, left: 0 };
+
   ["rightHand", "leftHand"].forEach((id) => {
     const hand = document.getElementById(id);
     if (!hand) return;
-    hand.addEventListener("controllerconnected", () => atualizarModoEntrada());
+    const lado = id === "rightHand" ? "right" : "left";
+
+    hand.addEventListener("controllerconnected", () => {
+      atualizarModoEntrada();
+      // laser-controls reativa showLine ao conectar o modelo; reaplica laser unico logo depois.
+      setTimeout(() => atualizarModoEntrada(), 50);
+    });
     hand.addEventListener("controllerdisconnected", () => atualizarModoEntrada());
+
+    hand.addEventListener("raycaster-intersection", () => {
+      if (!state.usingControllers || state.activeHand !== lado) return;
+      const agora = performance.now();
+      if (agora - hoverHapticaMs[lado] < 70) return;
+      hoverHapticaMs[lado] = agora;
+      pulsarHaptica(lado, 0.14, 15);
+    });
+
+    hand.addEventListener("triggerdown", () => {
+      initAudio();
+      if (!state.usingControllers) return;
+      if (state.activeHand !== lado) {
+        ativarMaoControle(lado);
+        return;
+      }
+      const rc = hand.components && hand.components.raycaster;
+      if (rc && rc.intersectedEls && rc.intersectedEls.length > 0) {
+        pulsarHaptica(lado, 0.42, 30);
+      }
+    });
+
+    hand.addEventListener("bbuttondown", () => voltarPorAtalho(lado));
+    hand.addEventListener("ybuttondown", () => voltarPorAtalho(lado));
+    hand.addEventListener("xbuttondown", () => { pulsarHaptica(lado, 0.24, 18); toggleVrNota(); });
+    hand.addEventListener("abuttondown", () => acaoRapidaBotaoA(lado));
+    hand.addEventListener("thumbstickdown", () => { pulsarHaptica(lado, 0.28, 22); alternarAlturaVr(); });
+
+    hand.addEventListener("thumbstickmoved", (e) => {
+      const x = e && e.detail ? Number(e.detail.x) : 0;
+      const st = stickEstado[lado];
+      if (Math.abs(x) < 0.25) {
+        st.travado = false;
+        return;
+      }
+      const agora = performance.now();
+      if (st.travado || Math.abs(x) < 0.68 || agora - st.ultimoMs < 260) return;
+      st.travado = true;
+      st.ultimoMs = agora;
+      navegarPorAnalogico(x > 0 ? 1 : -1, lado);
+    });
   });
 }
 
@@ -3185,6 +3778,14 @@ function rotuloIndicadorCurto(ind) {
   return ind.label.replace(/^Taxa de\s+/i, "").replace(/\s+Academica$/i, "");
 }
 
+// No painel do HUD (titulo e trilha) a instituicao vai pela sigla: o nome
+// completo ("Universidade Federal do Triangulo Mineiro") ocupava 2-3 linhas e
+// o painel, com a legenda da comparacao embaixo, descia ate o canto do grafico.
+// O nome completo continua no titulo 3D da tela de indicadores.
+function rotuloTrilha(ctx) {
+  return ctx && ctx.tipo === "instituicao" ? rotuloCurto(ctx) : rotuloContexto(ctx);
+}
+
 function rotuloCurto(ctx) {
   if (!ctx) return "";
   if (ctx.tipo === "brasil") return "Brasil";
@@ -3227,6 +3828,15 @@ function round2(value) {
   return Math.round(value * 100) / 100;
 }
 
+// Texto que precisa ficar em UMA linha: se for mais longo que o wrap padrao,
+// o wrap cresce com ele (a letra diminui) em vez de quebrar e empurrar o
+// bloco vizinho. Maiusculas sao ~10% mais largas que a media: dai a folga.
+function textoUmaLinha(entity, texto, wrapBase) {
+  const n = String(texto || "").length;
+  entity.setAttribute("wrap-count", Math.max(wrapBase, Math.ceil(n * 1.12) + 1));
+  entity.setAttribute("value", texto);
+}
+
 // ----------------------------------------------------------------------------
 // Criacao de elementos A-Frame (com reaplicacao explicita de transform).
 // ----------------------------------------------------------------------------
@@ -3258,7 +3868,12 @@ function setVectorAttribute(element, name, value) {
     element.setAttribute(name, value);
     return;
   }
-  element.setAttribute(name, `x: ${vector.x}; y: ${vector.y}; z: ${vector.z}`);
+  // "x y z" e o formato que o vec3 do A-Frame entende. O antigo
+  // ("x: 1; y: 2; z: 3") virava {x: NaN, y: 1, z: NaN} no componente; o
+  // object3D era corrigido logo depois, mas uma entidade que so inicializava
+  // depois desse acerto ficava em NaN - as 100 esferas do fechamento do tour
+  // (#visceralParticles) nunca apareciam. Mesma correcao da versao minimalista.
+  element.setAttribute(name, `${vector.x} ${vector.y} ${vector.z}`);
   applyObject3DVector(element, name, vector);
 }
 
@@ -3268,6 +3883,17 @@ function parseVector(value) {
   const parts = value.trim().split(/\s+/).map((p) => Number(p));
   if (parts.length !== 3 || parts.some((p) => Number.isNaN(p))) return null;
   return { x: parts[0], y: parts[1], z: parts[2] };
+}
+
+// Em sessao WebXR imersiva (Meta Quest Browser), window.requestAnimationFrame
+// pode ficar pausado enquanto xrSession.requestAnimationFrame conduz o loop.
+// Este helper usa automaticamente o loop ativo (XR em VR, window no desktop).
+function proximoQuadro(cb) {
+  const sessao = dom.scene && dom.scene.xrSession;
+  if (sessao && typeof sessao.requestAnimationFrame === "function") {
+    return sessao.requestAnimationFrame(cb);
+  }
+  return window.requestAnimationFrame(cb);
 }
 
 function applyPendingTransforms(root) {
@@ -3283,7 +3909,7 @@ function applyPendingTransforms(root) {
     });
   };
   applyAll();
-  requestAnimationFrame(applyAll);
+  proximoQuadro(applyAll);
 }
 
 function applyObject3DVector(element, name, vector) {
@@ -3300,7 +3926,7 @@ function setEntityVisible(entity, isVisible) {
   entity.setAttribute("visible", isVisible);
   const apply = () => { if (entity.object3D) entity.object3D.visible = isVisible; };
   apply();
-  requestAnimationFrame(apply);
+  proximoQuadro(apply);
 }
 
 function setObjectGlow(entity, color, intensity) {
@@ -3314,12 +3940,14 @@ function setObjectGlow(entity, color, intensity) {
 }
 
 function refreshRaycasters() {
-  requestAnimationFrame(() => {
+  const atualizar = () => {
     document.querySelectorAll("[raycaster]").forEach((entity) => {
       const component = entity.components?.raycaster;
       if (component) component.refreshObjects();
     });
-  });
+  };
+  atualizar();
+  proximoQuadro(atualizar);
 }
 
 function wait(ms) {
@@ -3364,6 +3992,7 @@ async function enterMultiplos(indicadorKey = "eficiencia", skipFade = false) {
     state.stage = "multiplos";
     state.indicatorKey = indicadorKey;
     state.context = null;
+    state.compareOn = false;
 
     resetCameraRig();
     setEntityVisible(dom.selectionWorld, false);
@@ -3373,7 +4002,7 @@ async function enterMultiplos(indicadorKey = "eficiencia", skipFade = false) {
     setEntityVisible(dom.composicaoView, false);
     setEntityVisible(dom.multiplosView, true);
     hideInfoPanelNow();
-    dom.hudLegend.hidden = true;
+    atualizarLegendaComparacao();
     dom.compLegend.hidden = true;
     // O mini-mapa (hot-swap de um contexto) nao se aplica a visao "todas as regioes".
     closeMiniMap();
@@ -3418,7 +4047,7 @@ function buildMultiplosSelectors() {
     // "Eficiencia"): uma palavra por botao, sem estourar a largura de 1,4.
     const label = el("a-text", {
       value: rotuloIndicadorCurto(ind), position: "0 0 0.05",
-      width: 1.2, align: "center", color: isAtivo ? "#ffffff" : "#cfe9ff", font: "kelsonsans",
+      width: 1.2, align: "center", color: isAtivo ? "#ffffff" : "#cfe9ff", ...FONTE_3D,
       "wrap-count": 12
     });
     btn.append(bg, label);
@@ -3521,17 +4150,17 @@ function buildMultiplos() {
 
     const title = el("a-text", {
       value: titleText, position: `${round2(-hx)} ${MULTIPLOS.headerY} 0.02`, width: 2.1,
-      align: "left", anchor: "left", color: headerCor, font: "kelsonsans"
+      align: "left", anchor: "left", color: headerCor, ...FONTE_3D
     });
     const valText = el("a-text", {
       value: `${fmt(item.val)}%`, position: `${round2(hx)} ${MULTIPLOS.headerY} 0.02`, width: 2.1,
-      align: "right", anchor: "right", color: indCor, font: "kelsonsans"
+      align: "right", anchor: "right", color: indCor, ...FONTE_3D
     });
 
     const hit = el("a-plane", {
       class: "multiplos-clickable hit",
       width: MULTIPLOS.w, height: MULTIPLOS.h, position: "0 0 0.05",
-      material: "color: #ffffff; opacity: 0.001; transparent: true"
+      material: "color: #ffffff; opacity: 0.001; transparent: true; depthWrite: false"
     });
     
     hit.addEventListener("click", () => {

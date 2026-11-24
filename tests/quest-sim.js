@@ -13,7 +13,7 @@
 //
 // Verificacoes:
 //   Q1  sessao imersiva abre e a cabeca fica a ~1,6 m (rig zerado em VR)
-//   Q2  perfil do renderer (antialias, 72 Hz, foveacao)
+//   Q2  perfil do renderer (antialias, 90 Hz Quest 3, foveacao 0)
 //   Q3  maos: aparecem sem internet; UMA pinca = UM clique no alvo do olhar
 //   Q4  maos: olhar parado NAO seleciona sozinho (com maos, quem confirma e a pinca)
 //   Q5  controles: UM gatilho = UM clique, no alvo do laser (o olhar nao clica junto)
@@ -118,7 +118,7 @@ const avisos = [];
     content:
       iwerSrc +
       `;(function () {
-        var d = new IWER.XRDevice(IWER.metaQuest2, { stereoEnabled: true });
+        var d = new IWER.XRDevice(IWER.metaQuest3 || IWER.metaQuest2, { stereoEnabled: true });
         d.installRuntime({ forceInstall: true });
         window.__xr = d;
         // Voz que nunca termina (nem onend nem onerror): pior caso do navegador
@@ -283,7 +283,7 @@ const avisos = [];
       fov: scene.renderer.xr.getFoveation(),
     };
   });
-  registra("Q2", q2.aa && q2.fr === 72 && q2.fov <= 0.5, `antialias ${q2.aa ? "ligado" : "DESLIGADO"}; ${q2.fr} Hz; foveacao ${q2.fov}`);
+  registra("Q2", q2.aa && q2.fr >= 90 && q2.fov <= 0.25, `antialias ${q2.aa ? "ligado" : "DESLIGADO"}; ${q2.fr} Hz; foveacao ${q2.fov}`);
 
   // ---- Q3/Q4: maos ---------------------------------------------------------
   await page.evaluate(() => {

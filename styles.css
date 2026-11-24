@@ -31,14 +31,24 @@ a-scene {
   pointer-events: none;
 }
 
-.brand-panel {
+/* Coluna da esquerda: painel + legendas empilhados (nunca um sobre o outro). */
+.hud-left {
   position: absolute;
   left: clamp(16px, 4vw, 44px);
   top: clamp(14px, 4vh, 34px);
   display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+/* Largura limitada (ate ~27% da tela): com 420 px o painel chegava a 34% em
+   1366 px e cobria a ponta esquerda dos titulos 3D (manchete, "Olhe para uma
+   regiao", o chip "Conclusao" do painel-equacao). */
+.brand-panel {
+  display: grid;
   gap: 5px;
-  min-width: min(420px, calc(100vw - 32px));
-  padding: 14px 16px;
+  width: clamp(250px, 24vw, 330px);
+  padding: 13px 15px;
   color: var(--text);
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
@@ -115,6 +125,30 @@ a-scene {
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+/* Recolhida: so a linha "Como ler esta visualizacao", um chip no rodape.
+   O mouse por cima (ou o foco) abre de novo. Aberta sozinha (ao entrar numa
+   etapa) ela deixa o clique passar para a cena; so o chip e a nota aberta
+   pelo mouse recebem o ponteiro. */
+.nota-panel.is-recolhida,
+.nota-panel.por-mouse {
+  pointer-events: auto;
+}
+
+.nota-panel.is-recolhida {
+  padding: 7px 12px;
+  gap: 0;
+  cursor: help;
+}
+
+.nota-panel.is-recolhida strong,
+.nota-panel.is-recolhida p {
+  display: none;
+}
+
+.nota-panel.is-recolhida .nota-kicker::after {
+  content: "  +";
 }
 
 @media (max-width: 720px) {
@@ -314,9 +348,6 @@ a-scene {
 }
 
 .hud-legend {
-  position: absolute;
-  left: clamp(16px, 4vw, 44px);
-  top: clamp(108px, 16vh, 150px);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -363,24 +394,18 @@ a-scene {
   margin-left: 6px;
 }
 
-#compLegend {
-  top: clamp(150px, 24vh, 200px);
-}
-
 @media (max-width: 720px) {
   .brand-panel {
     padding: 12px 13px;
   }
-
-  .hud-legend {
-    top: clamp(96px, 18vh, 140px);
-  }
 }
 
 /* Tour guiado — barra de progresso (HUD overlay) */
+/* A esquerda do botao VR do A-Frame (canto inferior direito, ~58 px): com
+   right 44 px a ponta da barra ("1 / 6") ficava embaixo dele. */
 .tour-bar {
   position: absolute;
-  right: clamp(16px, 4vw, 44px);
+  right: 92px;
   bottom: clamp(16px, 5vh, 40px);
   display: flex;
   align-items: center;
@@ -460,4 +485,58 @@ a-scene {
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.12);
   font-size: 0.86em;
+}
+
+/* Legenda da narracao (desktop): rodape centrado, abaixo da faixa de controles
+   3D (que termina em ~89% da altura). */
+.legenda-2d {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(6px, 1.4vh, 14px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(640px, 46vw);
+  padding: 6px 12px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: 8px;
+  font-size: 0.84rem;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.legenda-2d[hidden] {
+  display: none;
+}
+
+/* Janela baixa (notebook com o navegador aberto): painel mais compacto, para
+   a coluna painel + legenda nao descer sobre o canto do grafico. */
+@media (max-height: 720px) {
+  .hud-left {
+    gap: 6px;
+  }
+
+  .brand-panel {
+    gap: 3px;
+    padding: 10px 13px;
+  }
+
+  .brand-panel strong {
+    font-size: 1rem;
+  }
+
+  .brand-panel span#hudSubtitle {
+    font-size: 0.8rem;
+  }
+
+  .breadcrumb {
+    margin-top: 3px;
+    padding-top: 4px;
+    font-size: 0.72rem;
+  }
+
+  .hud-legend {
+    padding: 6px 11px;
+    font-size: 0.74rem;
+  }
 }
